@@ -3,7 +3,7 @@ import {
     Vec2, Vec3, UITransform, EventTouch, Input, input,
     tween, v3
 } from 'cc';
-import { GridCell, GAME_CONFIG } from '../types/GameTypes';
+import { GridCell, GAME_CONFIG, GameState } from '../types/GameTypes';
 import { GridManager } from '../core/GridManager';
 import { GameManager } from '../core/GameManager';
 import { Weapon } from '../entities/Weapon';
@@ -30,6 +30,12 @@ export class GridUI extends Component {
 
     @property(Node)
     public dragLayer: Node | null = null;        // 拖拽层（最高层）
+
+    @property(Prefab)
+    public projectilePrefab: Prefab | null = null; // 子弹 Prefab（注入给 Weapon）
+
+    @property(Node)
+    public projectileContainer: Node | null = null; // 子弹容器（注入给 Weapon）
 
     @property({ type: Number })
     public cellSize: number = 160;               // 格子尺寸（像素）
@@ -60,6 +66,9 @@ export class GridUI extends Component {
 
         // 监听 GridManager 格子变化
         GridManager.instance?.onChange(this._onGridChange.bind(this));
+
+        // 监听波次状态，切换武器自动攻击
+        GameManager.instance?.onStateChange(this._onStateChange.bind(this));
     }
 
     onDestroy() {
@@ -158,6 +167,9 @@ export class GridUI extends Component {
 
         const weapon = node.getComponent(Weapon);
         weapon?.init(config, row, col);
+        // 注入子弹资源（weapon 需要但不存在于 prefab 绑定中）
+        if (weapon && this.projectilePrefab) weapon.projectilePrefab = this.projectilePrefab;
+        if (weapon && this.projectileContainer) weapon.projectileContainer = this.projectileContainer;
         weapon?.playSpawnAnimation();
 
         this._weaponNodes[row][col] = node;
@@ -366,5 +378,24 @@ export class GridUI extends Component {
             containerWorldPos.y + y,
             0
         );
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 游戏状态联动：波次开始/结束切换武器攻击
+    // ─────────────────────────────────────────────────────────────
+
+    private _onStateChange(state: GameState): void {
+        const attacking = state === GameState.WAVE_ACTIVE;
+        this._setAllWeaponsAttack(attacking);
+    }
+
+    private _setAllWeaponsAttack(enabled: boolean): void {
+        for (const row of this._weaponNodes) {
+            for (const node of row) {
+                if (node) {
+                    node.getComponent(Weapon)?.setAttackEnabled(enabled);
+                }
+            }
+        }
     }
 }

@@ -564,7 +564,14 @@
                       },
         "cellSize":  160,
         "cellGap":  10,
-        "_id":  "72U53qIZNGILvSB57qUSX3"
+        "_id":  "72U53qIZNGILvSB57qUSX3",
+        "projectilePrefab":  {
+                                 "__expectedType__":  "cc.Prefab",
+                                 "__uuid__":  "b03a89ab-1549-4b32-b463-25eac0dcada8"
+                             },
+        "projectileContainer":  {
+                                    "__id__":  17
+                                }
     },
     {
         "__type__":  "cc.Node",
