@@ -1,5 +1,7 @@
-import { _decorator, Component, Label, Sprite, Color, Node, tween, Vec3 } from 'cc';
+import { _decorator, Component, Label, Sprite, Color, Node, Prefab, instantiate, tween, Vec3 } from 'cc';
 import { WeaponConfig } from '../types/GameTypes';
+import { WaveManager } from '../core/WaveManager';
+import { Projectile } from './Projectile';
 
 const { ccclass, property } = _decorator;
 
@@ -23,10 +25,24 @@ export class Weapon extends Component {
     @property(Node)
     public bgNode: Node | null = null;        // 背景节点（用于换色）
 
+    @property(Prefab)
+    public projectilePrefab: Prefab | null = null;  // 子弹 Prefab
+
+    @property(Node)
+    public projectileContainer: Node | null = null; // 子弹父节点（场景级）
+
     // ─── 武器数据 ─────────────────────────────────────────────────
     private _config: WeaponConfig | null = null;
     private _row: number = -1;
     private _col: number = -1;
+
+    // ─── 自动攻击状态（T026）────────────────────────────────────────
+    private _attackTimer: number = 0;
+    private _attackEnabled: boolean = false;
+    private _projectilePool: Projectile[] = [];
+    // 武器攻击力临时加成（技能 buff_weapons）
+    private _damageMultiplier: number = 1.0;
+    private _buffTimer: number = 0;
 
     // ─── 颜色映射（按等级） ────────────────────────────────────────
     private static readonly LEVEL_COLORS: Color[] = [
@@ -82,6 +98,78 @@ export class Weapon extends Component {
     public setGridPos(row: number, col: number): void {
         this._row = row;
         this._col = col;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // T026: 自动攻击
+    // ─────────────────────────────────────────────────────────────
+
+    /** 启用/禁用自动攻击（波次开始/结束时切换） */
+    public setAttackEnabled(enabled: boolean): void {
+        this._attackEnabled = enabled;
+        if (!enabled) this._attackTimer = 0;
+    }
+
+    update(dt: number) {
+        if (!this._attackEnabled || !this._config) return;
+
+        // buff 计时
+        if (this._buffTimer > 0) {
+            this._buffTimer -= dt;
+            if (this._buffTimer <= 0) this._damageMultiplier = 1.0;
+        }
+
+        // 攻击冷却
+        this._attackTimer += dt;
+        // attackSpeed 是攻击间隔（秒）
+        if (this._attackTimer >= (1 / this._config.attackSpeed)) {
+            this._attackTimer = 0;
+            this._tryAttack();
+        }
+    }
+
+    private _tryAttack(): void {
+        if (!this._config) return;
+        const wm = WaveManager.instance;
+        if (!wm) return;
+
+        const wp = this.node.worldPosition;
+        const target = wm.findTarget(wp.x, wp.y, this._config.range);
+        if (!target) return;
+
+        this._fireProjectile(target);
+    }
+
+    private _fireProjectile(target: any): void {
+        if (!this._config) return;
+        const container = this.projectileContainer;
+        if (!container || !this.projectilePrefab) return;
+
+        // 对象池取子弹
+        let proj = this._projectilePool.pop() ?? null;
+        if (!proj) {
+            const node = instantiate(this.projectilePrefab);
+            container.addChild(node);
+            proj = node.getComponent(Projectile);
+            if (!proj) return;
+        } else {
+            container.addChild(proj.node);
+        }
+
+        // 从武器位置出发
+        proj.node.setWorldPosition(this.node.worldPosition);
+
+        const damage = Math.round(this._config.damage * this._damageMultiplier);
+        proj.init(target, damage, (p) => {
+            p.reset();
+            this._projectilePool.push(p);
+        });
+    }
+
+    /** 临时增益（技能 buff_weapons） */
+    public applyDamageBuff(multiplier: number, duration: number): void {
+        this._damageMultiplier = multiplier;
+        this._buffTimer = duration;
     }
 
     // ─────────────────────────────────────────────────────────────

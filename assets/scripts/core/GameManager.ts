@@ -2,6 +2,7 @@ import { _decorator, Component, resources, JsonAsset } from 'cc';
 import { GameState, PlayerState, WeaponConfig, EnemyConfig, WaveConfig, SkinConfig, GAME_CONFIG } from '../types/GameTypes';
 import { StorageManager } from '../data/StorageManager';
 import { EconomyManager } from './EconomyManager';
+import { WaveManager } from './WaveManager';
 
 const { ccclass, property } = _decorator;
 
@@ -26,6 +27,9 @@ export class GameManager extends Component {
 
     @property(EconomyManager)
     public economyManager: EconomyManager | null = null;
+
+    @property(WaveManager)
+    public waveManager: WaveManager | null = null;
 
     // ─── 游戏状态 ────────────────────────────────────────────────
     private _state: GameState = GameState.IDLE;
@@ -156,6 +160,8 @@ export class GameManager extends Component {
     public startWave(): void {
         if (this._state !== GameState.WAVE_PREP) return;
         this._setState(GameState.WAVE_ACTIVE);
+        // 通知 WaveManager 启动当前波次
+        this.waveManager?.startWave(this.currentWave);
     }
 
     /** 波次结束（由 WaveManager 调用） */
