@@ -2,13 +2,13 @@
   "ver": "1.1.50",
   "importer": "prefab",
   "imported": true,
-  "uuid": "8fd651d6-b3b2-4d66-8108-b783adafbb4c",
+  "uuid": "123e4cb4-a08f-4c2a-8e40-356f45818582",
   "files": [
     ".json"
   ],
   "subMetas": {},
   "userData": {
-    "syncNodeName": "EnemyPrefab",
+    "syncNodeName": "ProjectilePrefab",
     "hasIcon": false
   }
 }

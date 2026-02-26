@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Prefab, instantiate } from 'cc';
+import { _decorator, Component, Node, Prefab, instantiate, resources } from 'cc';
 import { WaveConfig, WaveEnemy, GameState } from '../types/GameTypes';
 import { GameManager } from './GameManager';
 import { Enemy, EnemyDeathCallback, EnemyReachEndCallback } from '../entities/Enemy';
