@@ -1,0 +1,14 @@
+{
+  "ver": "2.0.3",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "b03a89ab-1549-4b32-b463-25eac0dcada8",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "ProjectilePrefab",
+    "hasIcon": false
+  }
+}
