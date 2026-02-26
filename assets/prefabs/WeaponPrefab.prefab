@@ -1,15 +1,307 @@
-{"value":[
-{"__type__":"cc.Prefab","_name":"WeaponPrefab","_objFlags":0,"__editorExtras__":{},"_native":"","data":{"__id__":1},"optimizationPolicy":0,"persistent":false},
-{"__type__":"cc.Node","_name":"WeaponPrefab","_objFlags":0,"__editorExtras__":{},"_parent":null,"_children":[{"__id__":2}],"_active":true,"_components":[{"__id__":4},{"__id__":6},{"__id__":8}],"_prefab":{"__id__":10},"_lpos":{"__type__":"cc.Vec3","x":0,"y":0,"z":0},"_lrot":{"__type__":"cc.Quat","x":0,"y":0,"z":0,"w":1},"_lscale":{"__type__":"cc.Vec3","x":1,"y":1,"z":1},"_mobility":0,"_layer":1073741824,"_euler":{"__type__":"cc.Vec3","x":0,"y":0,"z":0},"_id":""},
-{"__type__":"cc.Node","_name":"LevelLabel","_objFlags":0,"__editorExtras__":{},"_parent":{"__id__":1},"_children":[],"_active":true,"_components":[{"__id__":3}],"_prefab":{"__id__":11},"_lpos":{"__type__":"cc.Vec3","x":0,"y":-35,"z":0},"_lrot":{"__type__":"cc.Quat","x":0,"y":0,"z":0,"w":1},"_lscale":{"__type__":"cc.Vec3","x":1,"y":1,"z":1},"_mobility":0,"_layer":1073741824,"_euler":{"__type__":"cc.Vec3","x":0,"y":0,"z":0},"_id":""},
-{"__type__":"cc.Label","_name":"","_objFlags":0,"__editorExtras__":{},"node":{"__id__":2},"_enabled":true,"__prefab":{"__id__":12},"_customMaterial":null,"_srcBlendFactor":2,"_dstBlendFactor":4,"_color":{"__type__":"cc.Color","r":255,"g":255,"b":255,"a":255},"_string":"Lv1","_horizontalAlign":1,"_verticalAlign":1,"_actualFontSize":24,"_fontSize":24,"_fontFamily":"Arial","_lineHeight":40,"_overflow":0,"_enableWrapText":true,"_font":null,"_isSystemFontUsed":true,"_isItalic":false,"_isBold":true,"_isUnderline":false,"_underlineHeight":2,"_cacheMode":0,"_id":""},
-{"__type__":"cc.UITransform","_name":"","_objFlags":0,"__editorExtras__":{},"node":{"__id__":1},"_enabled":true,"__prefab":{"__id__":5},"_contentSize":{"__type__":"cc.Size","width":120,"height":120},"_anchorPoint":{"__type__":"cc.Vec2","x":0.5,"y":0.5},"_id":""},
-{"__type__":"cc.CompPrefabInfo","fileId":"WeaponUITransform01"},
-{"__type__":"cc.Sprite","_name":"","_objFlags":0,"__editorExtras__":{},"node":{"__id__":1},"_enabled":true,"__prefab":{"__id__":7},"_customMaterial":null,"_srcBlendFactor":2,"_dstBlendFactor":4,"_color":{"__type__":"cc.Color","r":100,"g":180,"b":255,"a":255},"_spriteFrame":null,"_type":0,"_fillType":0,"_sizeMode":1,"_fillCenter":{"__type__":"cc.Vec2","x":0,"y":0},"_fillStart":0,"_fillRange":0,"_isTrimmedMode":true,"_useGrayscale":false,"_atlas":null,"_id":""},
-{"__type__":"cc.CompPrefabInfo","fileId":"WeaponSprite01"},
-{"__type__":"ea818FNaItA9o9gGyP20R+M","_name":"","_objFlags":0,"__editorExtras__":{},"node":{"__id__":1},"_enabled":true,"__prefab":{"__id__":9},"levelLabel":{"__id__":2},"nameLabel":null,"iconSprite":null,"bgNode":{"__id__":1},"projectilePrefab":null,"projectileContainer":null,"_id":""},
-{"__type__":"cc.CompPrefabInfo","fileId":"WeaponComp01"},
-{"__type__":"cc.PrefabInfo","root":{"__id__":1},"asset":{"__id__":0},"fileId":"2bRv7O27hCipeZX86d82I9","targetOverrides":null,"nestedPrefabInstanceRoots":null,"instance":null},
-{"__type__":"cc.PrefabInfo","root":{"__id__":1},"asset":{"__id__":0},"fileId":"LevelLabelNode01","targetOverrides":null,"nestedPrefabInstanceRoots":null,"instance":null},
-{"__type__":"cc.CompPrefabInfo","fileId":"LevelLabelComp01"}
-]}
+[
+  {
+    "__type__": "cc.Prefab",
+    "_name": "WeaponPrefab",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "_native": "",
+    "data": {
+      "__id__": 1
+    },
+    "optimizationPolicy": 0,
+    "persistent": false
+  },
+  {
+    "__type__": "cc.Node",
+    "_name": "WeaponPrefab",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "_parent": null,
+    "_children": [
+      {
+        "__id__": 2
+      }
+    ],
+    "_active": true,
+    "_components": [
+      {
+        "__id__": 8
+      },
+      {
+        "__id__": 10
+      },
+      {
+        "__id__": 12
+      },
+      {
+        "__id__": 14
+      }
+    ],
+    "_prefab": {
+      "__id__": 16
+    },
+    "_lpos": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "_lrot": {
+      "__type__": "cc.Quat",
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "w": 1
+    },
+    "_lscale": {
+      "__type__": "cc.Vec3",
+      "x": 1,
+      "y": 1,
+      "z": 1
+    },
+    "_mobility": 0,
+    "_layer": 1073741824,
+    "_euler": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "_id": ""
+  },
+  {
+    "__type__": "cc.Node",
+    "_name": "LevelLabel",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "_parent": {
+      "__id__": 1
+    },
+    "_children": [],
+    "_active": true,
+    "_components": [
+      {
+        "__id__": 3
+      },
+      {
+        "__id__": 5
+      }
+    ],
+    "_prefab": {
+      "__id__": 7
+    },
+    "_lpos": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "_lrot": {
+      "__type__": "cc.Quat",
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "w": 1
+    },
+    "_lscale": {
+      "__type__": "cc.Vec3",
+      "x": 1,
+      "y": 1,
+      "z": 1
+    },
+    "_mobility": 0,
+    "_layer": 1073741824,
+    "_euler": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "_id": ""
+  },
+  {
+    "__type__": "cc.UITransform",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 2
+    },
+    "_enabled": true,
+    "__prefab": {
+      "__id__": 4
+    },
+    "_contentSize": {
+      "__type__": "cc.Size",
+      "width": 100,
+      "height": 100
+    },
+    "_anchorPoint": {
+      "__type__": "cc.Vec2",
+      "x": 0.5,
+      "y": 0.5
+    },
+    "_id": ""
+  },
+  {
+    "__type__": "cc.CompPrefabInfo",
+    "fileId": "St68MPxj0dHIlC4AhW7dqN"
+  },
+  {
+    "__type__": "cc.Label",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 2
+    },
+    "_enabled": true,
+    "__prefab": {
+      "__id__": 6
+    },
+    "_string": "Label",
+    "_horizontalAlign": 1,
+    "_verticalAlign": 1,
+    "_actualFontSize": 20,
+    "_fontSize": 20,
+    "_fontFamily": "Arial",
+    "_lineHeight": 25,
+    "_overflow": 0,
+    "_enableWrapText": true,
+    "_font": null,
+    "_isSystemFontUsed": true,
+    "_spacingX": 0,
+    "_isItalic": false,
+    "_isBold": false,
+    "_isUnderline": false,
+    "_underlineHeight": 2,
+    "_cacheMode": 0,
+    "_id": ""
+  },
+  {
+    "__type__": "cc.CompPrefabInfo",
+    "fileId": "F2stoqyPIKS5EI8AyK0nfb"
+  },
+  {
+    "__type__": "cc.PrefabInfo",
+    "root": {
+      "__id__": 1
+    },
+    "asset": {
+      "__id__": 0
+    },
+    "fileId": "0biUXCrltJiaKAaN43RJ2z",
+    "targetOverrides": null,
+    "nestedPrefabInstanceRoots": null,
+    "instance": null
+  },
+  {
+    "__type__": "cc.UITransform",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 1
+    },
+    "_enabled": true,
+    "__prefab": {
+      "__id__": 9
+    },
+    "_contentSize": {
+      "__type__": "cc.Size",
+      "width": 100,
+      "height": 100
+    },
+    "_anchorPoint": {
+      "__type__": "cc.Vec2",
+      "x": 0.5,
+      "y": 0.5
+    },
+    "_id": ""
+  },
+  {
+    "__type__": "cc.CompPrefabInfo",
+    "fileId": "4QlUPDXS0AwEnHKcI3Stem"
+  },
+  {
+    "__type__": "cc.Sprite",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 1
+    },
+    "_enabled": true,
+    "__prefab": {
+      "__id__": 11
+    },
+    "_spriteFrame": null,
+    "_type": 0,
+    "_fillType": 0,
+    "_sizeMode": 1,
+    "_fillCenter": {
+      "__type__": "cc.Vec2",
+      "x": 0,
+      "y": 0
+    },
+    "_fillStart": 0,
+    "_fillRange": 0,
+    "_isTrimmedMode": true,
+    "_useGrayscale": false,
+    "_atlas": null,
+    "_id": ""
+  },
+  {
+    "__type__": "cc.CompPrefabInfo",
+    "fileId": "uzaLsyymjXMxJIEkls25va"
+  },
+  {
+    "__type__": "Weapon",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 1
+    },
+    "_enabled": true,
+    "__prefab": {
+      "__id__": 13
+    },
+    "_id": ""
+  },
+  {
+    "__type__": "cc.CompPrefabInfo",
+    "fileId": "LFUHN2VVSEht2D3kJmR5VO"
+  },
+  {
+    "__type__": "Weapon",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 1
+    },
+    "_enabled": true,
+    "__prefab": {
+      "__id__": 15
+    },
+    "_id": ""
+  },
+  {
+    "__type__": "cc.CompPrefabInfo",
+    "fileId": "5xmC+XVpQ2QsCWy8EEUZap"
+  },
+  {
+    "__type__": "cc.PrefabInfo",
+    "root": {
+      "__id__": 1
+    },
+    "asset": {
+      "__id__": 0
+    },
+    "fileId": "2bRv7O27hCipeZX86d82I9",
+    "targetOverrides": null,
+    "nestedPrefabInstanceRoots": null,
+    "instance": null
+  }
+]
