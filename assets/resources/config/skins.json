@@ -1,0 +1,46 @@
+[
+  {
+    "id": "default",
+    "name": "默认勇士",
+    "skillName": "爆破手雷",
+    "skillDescription": "在屏幕中央投掷一枚手雷，对范围内所有敌人造成150点伤害",
+    "skillCooldown": 20,
+    "skillEffect": "aoe_damage",
+    "skillPower": 150,
+    "price": 0,
+    "isDefault": true
+  },
+  {
+    "id": "ice_mage",
+    "name": "冰霜法师",
+    "skillName": "冰冻领域",
+    "skillDescription": "释放冰冻领域，使所有敌人减速50%，持续5秒",
+    "skillCooldown": 25,
+    "skillEffect": "slow",
+    "skillPower": 0.5,
+    "price": 500,
+    "isDefault": false
+  },
+  {
+    "id": "war_general",
+    "name": "战争将军",
+    "skillName": "武器强化",
+    "skillDescription": "临时强化所有武器，攻击力提升100%，持续8秒",
+    "skillCooldown": 30,
+    "skillEffect": "buff_weapons",
+    "skillPower": 2.0,
+    "price": 800,
+    "isDefault": false
+  },
+  {
+    "id": "holy_priest",
+    "name": "神圣祭司",
+    "skillName": "神圣治愈",
+    "skillDescription": "恢复1条生命值，并对所有敌人造成50点神圣伤害",
+    "skillCooldown": 40,
+    "skillEffect": "heal",
+    "skillPower": 50,
+    "price": 1200,
+    "isDefault": false
+  }
+]

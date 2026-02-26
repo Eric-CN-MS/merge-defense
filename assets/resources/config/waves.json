@@ -1,0 +1,87 @@
+[
+  {
+    "waveNumber": 1,
+    "prepTime": 15,
+    "enemies": [
+      { "enemyId": "normal_1", "count": 5, "lane": 1, "spawnInterval": 1.5 }
+    ]
+  },
+  {
+    "waveNumber": 2,
+    "prepTime": 15,
+    "enemies": [
+      { "enemyId": "normal_1", "count": 4, "lane": 0, "spawnInterval": 1.5 },
+      { "enemyId": "normal_1", "count": 4, "lane": 2, "spawnInterval": 1.5 }
+    ]
+  },
+  {
+    "waveNumber": 3,
+    "prepTime": 15,
+    "enemies": [
+      { "enemyId": "normal_1", "count": 5, "lane": 0, "spawnInterval": 1.2 },
+      { "enemyId": "normal_1", "count": 5, "lane": 1, "spawnInterval": 1.2 },
+      { "enemyId": "normal_1", "count": 5, "lane": 2, "spawnInterval": 1.2 }
+    ]
+  },
+  {
+    "waveNumber": 4,
+    "prepTime": 15,
+    "enemies": [
+      { "enemyId": "normal_2", "count": 4, "lane": 0, "spawnInterval": 1.5 },
+      { "enemyId": "normal_2", "count": 4, "lane": 2, "spawnInterval": 1.5 }
+    ]
+  },
+  {
+    "waveNumber": 5,
+    "prepTime": 20,
+    "enemies": [
+      { "enemyId": "normal_2", "count": 3, "lane": 0, "spawnInterval": 1.2 },
+      { "enemyId": "normal_2", "count": 3, "lane": 2, "spawnInterval": 1.2 },
+      { "enemyId": "boss_1",   "count": 1, "lane": 1, "spawnInterval": 0 }
+    ]
+  },
+  {
+    "waveNumber": 6,
+    "prepTime": 15,
+    "enemies": [
+      { "enemyId": "elite_1", "count": 3, "lane": 0, "spawnInterval": 2.0 },
+      { "enemyId": "normal_2", "count": 6, "lane": 1, "spawnInterval": 1.0 },
+      { "enemyId": "elite_1", "count": 3, "lane": 2, "spawnInterval": 2.0 }
+    ]
+  },
+  {
+    "waveNumber": 7,
+    "prepTime": 15,
+    "enemies": [
+      { "enemyId": "elite_1", "count": 5, "lane": 0, "spawnInterval": 1.5 },
+      { "enemyId": "elite_1", "count": 5, "lane": 1, "spawnInterval": 1.5 },
+      { "enemyId": "elite_1", "count": 5, "lane": 2, "spawnInterval": 1.5 }
+    ]
+  },
+  {
+    "waveNumber": 8,
+    "prepTime": 15,
+    "enemies": [
+      { "enemyId": "elite_1", "count": 8, "lane": 0, "spawnInterval": 1.0 },
+      { "enemyId": "elite_1", "count": 8, "lane": 2, "spawnInterval": 1.0 }
+    ]
+  },
+  {
+    "waveNumber": 9,
+    "prepTime": 15,
+    "enemies": [
+      { "enemyId": "elite_1", "count": 6, "lane": 0, "spawnInterval": 1.0 },
+      { "enemyId": "elite_1", "count": 6, "lane": 1, "spawnInterval": 1.0 },
+      { "enemyId": "elite_1", "count": 6, "lane": 2, "spawnInterval": 1.0 }
+    ]
+  },
+  {
+    "waveNumber": 10,
+    "prepTime": 20,
+    "enemies": [
+      { "enemyId": "elite_1", "count": 5, "lane": 0, "spawnInterval": 1.0 },
+      { "enemyId": "boss_2",  "count": 1, "lane": 1, "spawnInterval": 0 },
+      { "enemyId": "elite_1", "count": 5, "lane": 2, "spawnInterval": 1.0 }
+    ]
+  }
+]

@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "3ceea50e-6aa9-46ce-bc34-63d325f53957",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "WeaponPrefab",
+    "hasIcon": false
+  }
+}
