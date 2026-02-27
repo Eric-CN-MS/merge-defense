@@ -65,17 +65,20 @@ export class WaveManager extends Component {
         this._totalSpawned = 0;
         this._totalDefeated = 0;
 
-        // 将所有敌人刷新指令展开为带延迟的队列
+        // 将所有敌人刷新指令展开为带延迟的队列（加随机抖动±0.4s）
         let accumulatedDelay = 0;
         config.enemies.forEach(waveEnemy => {
             for (let i = 0; i < waveEnemy.count; i++) {
+                const jitter = (Math.random() - 0.5) * 0.8; // ±0.4s
                 this._pendingSpawns.push({
                     config: waveEnemy,
-                    delay: accumulatedDelay,
+                    delay: Math.max(0, accumulatedDelay + jitter),
                 });
                 accumulatedDelay += waveEnemy.spawnInterval;
             }
         });
+        // 按实际 delay 排序（抖动可能打乱顺序）
+        this._pendingSpawns.sort((a, b) => a.delay - b.delay);
 
         this._totalToSpawn = this._pendingSpawns.length;
         this._spawnTimer = 0;
@@ -190,7 +193,7 @@ export class WaveManager extends Component {
      */
     public findTarget(worldX: number, worldY: number, range: number): Enemy | null {
         let target: Enemy | null = null;
-        let minHp = Infinity;
+        let lowestY = Infinity;  // 选 Y 最小（最接近底部）的敌人，优先拦截
 
         for (const enemy of this._activeEnemies) {
             if (!enemy.isActive) continue;
@@ -198,8 +201,8 @@ export class WaveManager extends Component {
             const dx = ep.x - worldX;
             const dy = ep.y - worldY;
             const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist <= range && enemy.currentHp < minHp) {
-                minHp = enemy.currentHp;
+            if (dist <= range && ep.y < lowestY) {
+                lowestY = ep.y;
                 target = enemy;
             }
         }

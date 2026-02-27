@@ -1,7 +1,7 @@
 import {
     _decorator, Component, Node, Prefab, instantiate,
     Vec2, Vec3, UITransform, EventTouch, Input, input,
-    tween, v3
+    tween, v3, CCFloat, CCInteger, Graphics, Color
 } from 'cc';
 import { GridCell, GAME_CONFIG, GameState } from '../types/GameTypes';
 import { GridManager } from '../core/GridManager';
@@ -37,10 +37,10 @@ export class GridUI extends Component {
     @property(Node)
     public projectileContainer: Node | null = null; // 子弹容器（注入给 Weapon）
 
-    @property({ type: Number })
+    @property(CCFloat)
     public cellSize: number = 160;               // 格子尺寸（像素）
 
-    @property({ type: Number })
+    @property(CCFloat)
     public cellGap: number = 10;                 // 格子间距
 
     // ─── 运行时状态 ───────────────────────────────────────────────
@@ -85,9 +85,6 @@ export class GridUI extends Component {
 
         const rows = gm.rows;
         const cols = gm.cols;
-        const step = this.cellSize + this.cellGap;
-        const offsetX = -((cols - 1) * step) / 2;
-        const offsetY = ((rows - 1) * step) / 2;
 
         this._cellNodes = [];
         this._weaponNodes = [];
@@ -95,34 +92,58 @@ export class GridUI extends Component {
         for (let r = 0; r < rows; r++) {
             this._cellNodes[r] = [];
             this._weaponNodes[r] = [];
-
             for (let c = 0; c < cols; c++) {
-                const x = offsetX + c * step;
-                const y = offsetY - r * step;
-
-                // 格子背景
-                let cellNode: Node;
-                if (this.cellPrefab) {
-                    cellNode = instantiate(this.cellPrefab);
-                } else {
-                    cellNode = new Node(`cell_${r}_${c}`);
-                }
-                cellNode.setPosition(x, y, 0);
-                this.gridContainer.addChild(cellNode);
-                this._cellNodes[r][c] = cellNode;
-
-                // 武器节点（初始为空）
+                this._cellNodes[r][c] = this._buildCell(r, c);
                 this._weaponNodes[r][c] = null;
             }
         }
-
-        // 初始化格子管理器并同步初始状态
-        gm.init(rows, cols);
         console.log(`[GridUI] 格子渲染完成 ${rows}×${cols}`);
+    }
+
+    /** 创建单个格子背景节点并加入 gridContainer */
+    private _buildCell(r: number, c: number): Node {
+        const gm = GridManager.instance!;
+        const cols = gm.cols;
+        const rows = gm.rows;
+        const step = this.cellSize + this.cellGap;
+        const offsetX = -((cols - 1) * step) / 2;
+        const offsetY = ((rows - 1) * step) / 2;
+        const x = offsetX + c * step;
+        const y = offsetY - r * step;
+
+        let cellNode: Node;
+        if (this.cellPrefab) {
+            cellNode = instantiate(this.cellPrefab);
+        } else {
+            cellNode = new Node(`cell_${r}_${c}`);
+            cellNode.layer = 1 << 25; // UI_2D
+            const uit = cellNode.addComponent(UITransform);
+            uit.setContentSize(this.cellSize, this.cellSize);
+            const g = cellNode.addComponent(Graphics);
+            g.fillColor = new Color(40, 50, 70, 200);
+            g.roundRect(-this.cellSize / 2, -this.cellSize / 2, this.cellSize, this.cellSize, 10);
+            g.fill();
+            g.strokeColor = new Color(80, 120, 180, 180);
+            g.lineWidth = 2;
+            g.roundRect(-this.cellSize / 2, -this.cellSize / 2, this.cellSize, this.cellSize, 10);
+            g.stroke();
+        }
+        cellNode.setPosition(x, y, 0);
+        this.gridContainer!.addChild(cellNode);
+        return cellNode;
     }
 
     /** GridManager 数据变化时刷新视图 */
     private _onGridChange(grid: GridCell[][]): void {
+        // 如果格子尺寸变了，先重建背景
+        const newRows = grid.length;
+        const newCols = grid[0]?.length ?? 0;
+        const curRows = this._cellNodes.length;
+        const curCols = this._cellNodes[0]?.length ?? 0;
+        if (newRows !== curRows || newCols !== curCols) {
+            this._rebuildCells();
+            return; // _rebuildCells 内部会重新定位武器，无需再 sync
+        }
         for (let r = 0; r < grid.length; r++) {
             for (let c = 0; c < grid[r].length; c++) {
                 this._syncCell(grid[r][c]);
@@ -161,9 +182,9 @@ export class GridUI extends Component {
         if (!config) return null;
 
         const node = instantiate(this.weaponPrefab);
-        const cellPos = this._getCellWorldPos(row, col);
-        node.setPosition(cellPos);
         this.gridContainer.addChild(node);
+        const cellPos = this._getCellWorldPos(row, col);
+        node.setWorldPosition(cellPos);
 
         const weapon = node.getComponent(Weapon);
         weapon?.init(config, row, col);
@@ -384,9 +405,138 @@ export class GridUI extends Component {
     // 游戏状态联动：波次开始/结束切换武器攻击
     // ─────────────────────────────────────────────────────────────
 
+    // ─── 布局常量 ──────────────────────────────────────────────────
+    // 准备阶段：格子居中大格
+    private readonly PREP_POS   = new Vec3(-270, 0, 0);
+    private readonly PREP_SCALE = new Vec3(1, 1, 1);
+    // 战斗阶段：武器变成底部一排小图标（不显示格子背景）
+    private readonly BATTLE_Y     = -295;
+    private readonly BATTLE_ICON  = 52;   // 战斗时每个武器图标宽度
+    private readonly BATTLE_GAP   = 8;    // 图标间距
+
     private _onStateChange(state: GameState): void {
         const attacking = state === GameState.WAVE_ACTIVE;
         this._setAllWeaponsAttack(attacking);
+        if (attacking) {
+            this._enterBattleLayout();
+        } else {
+            this._exitBattleLayout();
+        }
+    }
+
+    /** 进入战斗：格子背景隐藏，武器缩成底部一排图标 */
+    private _enterBattleLayout(): void {
+        // 隐藏格子背景
+        for (const row of this._cellNodes) {
+            for (const cell of row) { if (cell) cell.active = false; }
+        }
+        // 把所有武器节点排成一行
+        const weapons: Node[] = [];
+        for (const row of this._weaponNodes) {
+            for (const node of row) { if (node) weapons.push(node); }
+        }
+        const total = weapons.length;
+        const step  = this.BATTLE_ICON + this.BATTLE_GAP;
+        const startX = -(total - 1) * step / 2;
+        weapons.forEach((node, i) => {
+            if (!this.gridContainer) return;
+            this.gridContainer.addChild(node); // 统一父节点
+            tween(node)
+                .to(0.3, {
+                    worldPosition: new Vec3(
+                        640 + startX + i * step,   // 世界坐标 X，居中
+                        this.BATTLE_Y + 360,        // 世界坐标 Y（Canvas中心360）
+                        0
+                    ),
+                    scale: new Vec3(
+                        this.BATTLE_ICON / this.cellSize,
+                        this.BATTLE_ICON / this.cellSize,
+                        1
+                    )
+                }, { easing: 'cubicOut' })
+                .start();
+        });
+    }
+
+    /** 退出战斗：清除 CD 阴影，武器回到格子，格子背景重显 */
+    private _exitBattleLayout(): void {
+        // 清除所有武器的 CD 遮罩
+        for (const row of this._weaponNodes) {
+            for (const node of row) {
+                if (!node) continue;
+                const cdNode = node.getChildByName('CDOverlay');
+                if (cdNode) {
+                    cdNode.getComponent(Graphics)?.clear();
+                }
+                // 归位（tween 回格子原始坐标和 scale）
+                const weapon = node.getComponent(Weapon);
+                if (!weapon) continue;
+                const cellWorldPos = this._getCellWorldPos(weapon.row, weapon.col);
+                tween(node)
+                    .to(0.3, {
+                        worldPosition: cellWorldPos,
+                        scale: new Vec3(1, 1, 1)
+                    }, { easing: 'cubicOut' })
+                    .start();
+            }
+        }
+        // 恢复格子背景（延迟等动画结束）
+        this.scheduleOnce(() => {
+            for (const row of this._cellNodes) {
+                for (const cell of row) { if (cell) cell.active = true; }
+            }
+        }, 0.35);
+
+        // 每两波后格子可能扩了，重建格子背景
+        this.scheduleOnce(() => this._rebuildCells(), 0.4);
+    }
+
+    /** 重建格子背景（格子数量变化时） */
+    private _rebuildCells(): void {
+        const gm = GridManager.instance;
+        if (!gm || !this.gridContainer) return;
+        const newRows = gm.rows;
+        const newCols = gm.cols;
+        if (newRows === this._cellNodes.length && newCols === (this._cellNodes[0]?.length ?? 0)) return;
+
+        // 移除旧格子背景
+        for (const row of this._cellNodes) {
+            for (const cell of row) { cell?.destroy(); }
+        }
+        // 格子变多时缩小 cellSize（最小80）
+        const maxCols = Math.max(newRows, newCols);
+        this.cellSize = Math.max(80, Math.floor(460 / maxCols));
+
+        // 重新初始化格子背景数组
+        this._cellNodes = [];
+        for (let r = 0; r < newRows; r++) {
+            this._cellNodes[r] = [];
+            for (let c = 0; c < newCols; c++) {
+                this._cellNodes[r][c] = this._buildCell(r, c);
+            }
+        }
+
+        // 武器节点数组扩容
+        while (this._weaponNodes.length < newRows) {
+            this._weaponNodes.push(new Array(newCols).fill(null));
+        }
+        for (const row of this._weaponNodes) {
+            while (row.length < newCols) row.push(null);
+        }
+
+        // ★ 重新定位所有已有武器节点到新格子坐标
+        for (let r = 0; r < this._weaponNodes.length; r++) {
+            for (let c = 0; c < (this._weaponNodes[r]?.length ?? 0); c++) {
+                const node = this._weaponNodes[r][c];
+                if (!node) continue;
+                const newPos = this._getCellWorldPos(r, c);
+                tween(node)
+                    .to(0.3, { worldPosition: newPos }, { easing: 'cubicOut' })
+                    .start();
+                // UITransform 尺寸也同步缩放
+                node.getComponent(UITransform)?.setContentSize(this.cellSize, this.cellSize);
+            }
+        }
     }
 
     private _setAllWeaponsAttack(enabled: boolean): void {

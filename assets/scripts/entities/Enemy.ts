@@ -1,4 +1,4 @@
-import { _decorator, Component, Label, Node, Sprite, Color, tween, Vec3, ProgressBar } from 'cc';
+import { _decorator, Component, Label, Node, Sprite, Color, tween, Vec3, ProgressBar, Graphics, UITransform, Layers } from 'cc';
 import { EnemyConfig } from '../types/GameTypes';
 import { EconomyManager } from '../core/EconomyManager';
 import { GameManager } from '../core/GameManager';
@@ -29,12 +29,15 @@ export class Enemy extends Component {
     public bodySprite: Sprite | null = null;
 
     // ─── 路线 X 坐标（由 WaveManager 设置）──────────────────────
-    /** 3 条路线的 X 坐标 */
-    public static readonly LANE_X: number[] = [-150, 0, 150];
-    /** 敌人出生 Y 坐标（屏幕上方外） */
-    public static readonly SPAWN_Y: number = 600;
-    /** 敌人到达底部的 Y 坐标 */
-    public static readonly END_Y: number = -700;
+    /** 战场 X 范围（世界坐标，对齐武器位置 ~475-540，让敌人在射程内经过） */
+    public static readonly FIELD_X_MIN: number = 350;
+    public static readonly FIELD_X_MAX: number = 700;
+    /** 兼容旧接口保留 */
+    public static readonly LANE_X: number[] = [-300, -100, 100];
+    /** 出生世界 Y（屏幕顶边外） */
+    public static readonly SPAWN_Y: number = 760;
+    /** 到达此世界 Y 触发扣血（低于武器Y=130，给武器留充足拦截空间） */
+    public static readonly END_Y: number = 90;
 
     // ─── 运行时数据 ───────────────────────────────────────────────
     private _config: EnemyConfig | null = null;
@@ -71,23 +74,19 @@ export class Enemy extends Component {
         this._speedMultiplier = 1.0;
         this._slowTimer = 0;
 
-        // 设置初始位置
-        const x = Enemy.LANE_X[lane] ?? 0;
-        this.node.setPosition(x, Enemy.SPAWN_Y, 0);
+        // 设置初始位置：X 随机，Y 从屏幕可见顶部出现（用世界坐标，避免父节点偏移）
+        const xRange = Enemy.FIELD_X_MAX - Enemy.FIELD_X_MIN;
+        const worldX = Enemy.FIELD_X_MIN + Math.random() * xRange;
+        const worldY = Enemy.SPAWN_Y;
+        this.node.setWorldPosition(worldX, worldY, 0);
         this.node.active = true;
 
         // 刷新 UI
         if (this.nameLabel) this.nameLabel.string = config.name;
         this._refreshHpBar();
 
-        // 按类型设置颜色
-        if (this.bodySprite) {
-            switch (config.type) {
-                case 'normal': this.bodySprite.color = new Color(80, 180, 80, 255); break;
-                case 'elite':  this.bodySprite.color = new Color(80, 80, 220, 255); break;
-                case 'boss':   this.bodySprite.color = new Color(200, 50, 50, 255); break;
-            }
-        }
+        // 用 Graphics 画敌人本体
+        this._drawBody(config.type);
     }
 
     /** 重置（回对象池前调用） */
@@ -96,6 +95,8 @@ export class Enemy extends Component {
         this._config = null;
         this._onDeath = null;
         this._onReachEnd = null;
+        // 重置 scale（死亡动画会把 scale 缩到 0）
+        this.node.setScale(1, 1, 1);
         this.node.active = false;
     }
 
@@ -114,13 +115,13 @@ export class Enemy extends Component {
             }
         }
 
-        // 向下移动
+        // 向下移动（用世界坐标，避免父节点影响）
         const speed = this._config.speed * this._speedMultiplier;
-        const pos = this.node.position;
-        this.node.setPosition(pos.x, pos.y - speed * dt, pos.z);
+        const wp = this.node.worldPosition;
+        this.node.setWorldPosition(wp.x, wp.y - speed * dt, 0);
 
-        // 到达底部
-        if (this.node.position.y <= Enemy.END_Y) {
+        // 到达底部（世界坐标）
+        if (this.node.worldPosition.y <= Enemy.END_Y) {
             this._reachEnd();
         }
     }
@@ -197,15 +198,58 @@ export class Enemy extends Component {
                 ? Math.max(0, this._currentHp / this._maxHp)
                 : 0;
         }
+        // 同时用 Graphics 刷新血条
+        this._drawBody(this._config?.type ?? 'normal');
     }
 
     private _playHitFlash(): void {
-        if (!this.bodySprite) return;
-        const orig = this.bodySprite.color.clone();
-        this.bodySprite.color = new Color(255, 255, 255, 255);
-        tween(this.node)
-            .delay(0.06)
-            .call(() => { if (this.bodySprite) this.bodySprite.color = orig; })
-            .start();
+        // bodySprite 闪白
+        if (this.bodySprite) {
+            const orig = this.bodySprite.color.clone();
+            this.bodySprite.color = new Color(255, 255, 255, 255);
+            this.scheduleOnce(() => { if (this.bodySprite) this.bodySprite.color = orig; }, 0.06);
+        } else {
+            // 没有 Sprite 时，用 Graphics 闪白后恢复
+            this.scheduleOnce(() => this._drawBody(this._config?.type ?? 'normal'), 0.06);
+        }
+    }
+
+    /** 用 Graphics 画敌人本体 + 血条 */
+    private _drawBody(type: string): void {
+        let g = this.node.getComponent(Graphics);
+        if (!g) g = this.node.addComponent(Graphics);
+        if (!g) return;
+        g.clear();
+
+        const r = 30;   // 敌人半径
+        // 本体颜色
+        switch (type) {
+            case 'normal': g.fillColor = new Color(80, 200, 80, 255); break;
+            case 'elite':  g.fillColor = new Color(80, 120, 230, 255); break;
+            case 'boss':   g.fillColor = new Color(220, 60, 60, 255); break;
+            default:       g.fillColor = new Color(80, 200, 80, 255); break;
+        }
+        g.circle(0, 0, r);
+        g.fill();
+
+        // 描边
+        g.strokeColor = new Color(255, 255, 255, 120);
+        g.lineWidth = 2;
+        g.circle(0, 0, r);
+        g.stroke();
+
+        // 血条背景（在本体上方）
+        const barW = 60, barH = 8;
+        const barX = -barW / 2;
+        const barY = r + 6;
+        g.fillColor = new Color(60, 60, 60, 200);
+        g.rect(barX, barY, barW, barH);
+        g.fill();
+
+        // 血条前景
+        const hp = this._maxHp > 0 ? Math.max(0, this._currentHp / this._maxHp) : 0;
+        g.fillColor = new Color(80, 220, 80, 255);
+        g.rect(barX, barY, barW * hp, barH);
+        g.fill();
     }
 }

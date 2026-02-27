@@ -1,4 +1,4 @@
-import { _decorator, Component, Label, Sprite, Color, Node, Prefab, instantiate, tween, Vec3 } from 'cc';
+import { _decorator, Component, Label, Sprite, Color, Node, Prefab, instantiate, tween, Vec3, Graphics, UITransform, Layers } from 'cc';
 import { WeaponConfig } from '../types/GameTypes';
 import { WaveManager } from '../core/WaveManager';
 import { Projectile } from './Projectile';
@@ -44,6 +44,9 @@ export class Weapon extends Component {
     private _damageMultiplier: number = 1.0;
     private _buffTimer: number = 0;
 
+    // ─── CD 时钟 Graphics 缓存 ─────────────────────────────────────
+    private _cdGraphics: Graphics | null = null;
+
     // ─── 颜色映射（按等级） ────────────────────────────────────────
     private static readonly LEVEL_COLORS: Color[] = [
         new Color(100, 180, 100, 255),   // Lv1 — 绿色
@@ -78,12 +81,28 @@ export class Weapon extends Component {
             this.nameLabel.string = this._config.name;
         }
 
-        // 背景颜色（按等级）
+        // 背景颜色 — 优先用 bgNode.Sprite，否则直接用 Graphics 画
+        const color = Weapon.LEVEL_COLORS[(this._config.level - 1) % Weapon.LEVEL_COLORS.length];
         if (this.bgNode) {
-            const color = Weapon.LEVEL_COLORS[this._config.level - 1] ?? Weapon.LEVEL_COLORS[0];
             const sprite = this.bgNode.getComponent(Sprite);
             if (sprite) sprite.color = color;
         }
+
+        // 始终尝试用 Graphics 在根节点画填充矩形（保证有背景色）
+        let g = this.node.getComponent(Graphics);
+        if (!g) g = this.node.addComponent(Graphics);
+        const uit = this.node.getComponent(UITransform);
+        const w = uit ? uit.contentSize.width : 140;
+        const h = uit ? uit.contentSize.height : 140;
+        g.clear();
+        g.fillColor = color;
+        g.roundRect(-w / 2, -h / 2, w, h, 12);
+        g.fill();
+        // 边框
+        g.strokeColor = new Color(255, 255, 255, 80);
+        g.lineWidth = 2;
+        g.roundRect(-w / 2, -h / 2, w, h, 12);
+        g.stroke();
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -121,10 +140,46 @@ export class Weapon extends Component {
 
         // 攻击冷却
         this._attackTimer += dt;
-        // attackSpeed 是攻击间隔（秒）
-        if (this._attackTimer >= (1 / this._config.attackSpeed)) {
+        const interval = 1 / this._config.attackSpeed;
+        if (this._attackTimer >= interval) {
             this._attackTimer = 0;
             this._tryAttack();
+        }
+
+        // 更新 CD 时钟扇形（每帧）
+        this._drawCdClock(this._attackTimer / interval);
+    }
+
+    /** 在武器背景上画时钟扇形 CD 指示 */
+    private _drawCdClock(progress: number): void {
+        if (!this._cdGraphics) {
+            const cdNode = new Node('CDOverlay');
+            cdNode.layer = Layers.Enum.UI_2D;
+            this.node.addChild(cdNode);
+            const uit = cdNode.addComponent(UITransform);
+            uit.setContentSize(140, 140);
+            this._cdGraphics = cdNode.addComponent(Graphics);
+        }
+        const g = this._cdGraphics;
+        const r = 60; // 扇形半径（略小于格子）
+        g.clear();
+
+        if (progress > 0.01) {
+            // 暗色遮罩扇形（顺时针从顶部开始）
+            const startAngle = Math.PI / 2;           // 12点钟方向
+            const endAngle = startAngle - progress * Math.PI * 2; // 顺时针
+            g.fillColor = new Color(0, 0, 0, 120);
+            g.moveTo(0, 0);
+            // arc 参数: cx, cy, r, startAngle, endAngle, counterClockwise
+            g.arc(0, 0, r, startAngle, endAngle, true);
+            g.lineTo(0, 0);
+            g.fill();
+
+            // 边框圆
+            g.strokeColor = new Color(255, 255, 255, 60);
+            g.lineWidth = 2;
+            g.circle(0, 0, r);
+            g.stroke();
         }
     }
 
@@ -149,10 +204,15 @@ export class Weapon extends Component {
         let proj = this._projectilePool.pop() ?? null;
         if (!proj) {
             const node = instantiate(this.projectilePrefab);
+            node.layer = Layers.Enum.UI_2D;
             container.addChild(node);
             proj = node.getComponent(Projectile);
-            if (!proj) return;
+            if (!proj) {
+                console.error('[Weapon] Projectile component missing on prefab!');
+                return;
+            }
         } else {
+            proj.node.layer = Layers.Enum.UI_2D;
             container.addChild(proj.node);
         }
 

@@ -1,8 +1,9 @@
-import { _decorator, Component, resources, JsonAsset } from 'cc';
+import { _decorator, Component, resources, JsonAsset, Camera, director, Layers, sys } from 'cc';
 import { GameState, PlayerState, WeaponConfig, EnemyConfig, WaveConfig, SkinConfig, GAME_CONFIG } from '../types/GameTypes';
 import { StorageManager } from '../data/StorageManager';
 import { EconomyManager } from './EconomyManager';
 import { WaveManager } from './WaveManager';
+import { GridManager } from './GridManager';
 
 const { ccclass, property } = _decorator;
 
@@ -56,16 +57,39 @@ export class GameManager extends Component {
             return;
         }
         GameManager._instance = this;
+
+        // ── 开发模式：自动清除存档，每次预览从第1波开始 ──
+        if (sys.isNative === false) {
+            sys.localStorage.clear();
+            console.log('[GameManager] DEV: localStorage cleared');
+        }
     }
 
     async start() {
         console.log('[GameManager] 启动...');
+        this._fixCameraForUI();
         await this._loadConfigs();
         this._loadOrCreatePlayerState();
         this._initManagers();
         this._setState(GameState.WAVE_PREP);
         console.log('[GameManager] 初始化完成，进入准备阶段');
     }
+
+    /** 运行时修复 Camera，确保能渲染 Canvas/UI_2D 节点 */
+    private _fixCameraForUI(): void {
+        const scene = director.getScene();
+        if (!scene) return;
+        const cameras = scene.getComponentsInChildren(Camera);
+        for (const cam of cameras) {
+            // Layers.Enum 里的值是 bit 位编号（如 UI_2D=25, DEFAULT=30）
+            // 必须用 1 << n 转成 bitmask
+            const UI_2D_MASK = 1 << Layers.Enum.UI_2D;     // 1<<25 = 33554432
+            const DEFAULT_MASK = 1 << Layers.Enum.DEFAULT;  // 1<<30 = 1073741824
+            cam.visibility = cam.visibility | UI_2D_MASK | DEFAULT_MASK;
+            console.log(`[GameManager] Camera visibility 修复: ${cam.node.name} -> 0x${cam.visibility.toString(16)}`);
+        }
+    }
+
 
     onDestroy() {
         if (GameManager._instance === this) {
@@ -137,6 +161,8 @@ export class GameManager extends Component {
 
     private _initManagers(): void {
         if (!this._playerState) return;
+        // GridManager を先に初期化（ShopUI が hasEmptyCell を参照するため）
+        GridManager.instance?.init(GAME_CONFIG.GRID_ROWS_INIT, GAME_CONFIG.GRID_COLS_INIT);
         this.economyManager?.init(this._playerState.gold);
     }
 
@@ -170,6 +196,10 @@ export class GameManager extends Component {
         this._playerState.currentWave++;
         if (this._playerState.currentWave > this._playerState.bestWave) {
             this._playerState.bestWave = this._playerState.currentWave;
+        }
+        // 每 2 波扩展 2 个格子（调用两次 expandCol，各加1列=3格，共+2格用追加行方式）
+        if (this._playerState.currentWave % 2 === 0) {
+            GridManager.instance?.expandTwoCells();
         }
         // 同步金币到存档
         this._playerState.gold = this.economyManager?.gold ?? this._playerState.gold;

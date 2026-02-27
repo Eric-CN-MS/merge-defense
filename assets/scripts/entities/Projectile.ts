@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Prefab, instantiate, Vec3 } from 'cc';
+import { _decorator, Component, Node, Prefab, instantiate, Vec3, Graphics, Color, UITransform, Layers } from 'cc';
 import { EnemyConfig } from '../types/GameTypes';
 import { Enemy } from './Enemy';
 
@@ -16,6 +16,7 @@ export class Projectile extends Component {
     private _damage: number = 0;
     private _speed: number = 800;        // 子弹速度（像素/秒）
     private _active: boolean = false;
+    private _color: Color = new Color(255, 220, 50, 255); // 默认黄色
 
     // 回收回调（对象池用）
     private _onRecycle: ((p: Projectile) => void) | null = null;
@@ -23,6 +24,10 @@ export class Projectile extends Component {
     // ─────────────────────────────────────────────────────────────
     // 初始化
     // ─────────────────────────────────────────────────────────────
+
+    start() {
+        this._drawBullet();
+    }
 
     public init(
         target: Enemy,
@@ -36,12 +41,42 @@ export class Projectile extends Component {
         this._speed = speed;
         this._active = true;
         this.node.active = true;
+        // 确保 layer = UI_2D，否则 Camera 看不到
+        this.node.layer = Layers.Enum.UI_2D;
+        this._drawBullet();
     }
 
     public reset(): void {
         this._active = false;
         this._target = null;
         this.node.active = false;
+    }
+
+    private _drawBullet(): void {
+        let uit = this.node.getComponent(UITransform);
+        if (!uit) { uit = this.node.addComponent(UITransform); }
+        uit.setContentSize(24, 24);
+
+        let g = this.node.getComponent(Graphics);
+        if (!g) g = this.node.addComponent(Graphics);
+        g.clear();
+        // 大光晕
+        g.fillColor = new Color(255, 200, 50, 60);
+        g.circle(0, 0, 12);
+        g.fill();
+        // 中圈
+        g.fillColor = new Color(255, 230, 80, 180);
+        g.circle(0, 0, 8);
+        g.fill();
+        // 实心内核
+        g.fillColor = new Color(255, 255, 120, 255);
+        g.circle(0, 0, 5);
+        g.fill();
+        // 描边
+        g.strokeColor = new Color(255, 255, 255, 200);
+        g.lineWidth = 1.5;
+        g.circle(0, 0, 5);
+        g.stroke();
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -78,10 +113,6 @@ export class Projectile extends Component {
         const moveX = (dx / dist) * this._speed * dt;
         const moveY = (dy / dist) * this._speed * dt;
         this.node.setWorldPosition(myPos.x + moveX, myPos.y + moveY, 0);
-
-        // 朝向目标旋转
-        const angle = Math.atan2(dy, dx) * 180 / Math.PI;
-        this.node.setRotationFromEuler(0, 0, angle - 90);
     }
 
     // ─────────────────────────────────────────────────────────────

@@ -20,8 +20,12 @@ export class GridManager extends Component {
     private _grid: GridCell[][] = [];
     private _rows: number = GAME_CONFIG.GRID_ROWS_INIT;
     private _cols: number = GAME_CONFIG.GRID_COLS_INIT;
+    /** 当前已解锁（激活）的格子数量 */
+    private _activeCount: number = GAME_CONFIG.GRID_ROWS_INIT * GAME_CONFIG.GRID_COLS_INIT;
+    /** 格子总数上限（rows × MAX_COLS，预先分配好） */
+    private static readonly MAX_COLS = 8;
 
-    // 格子变化回调（GridUI 监听）
+    public get activeCount(): number { return this._activeCount; }
     private _changeCallbacks: ((grid: GridCell[][]) => void)[] = [];
 
     onLoad() {
@@ -45,16 +49,17 @@ export class GridManager extends Component {
     /** 由 GameManager 调用，初始化格子（支持从存档恢复） */
     public init(rows: number = GAME_CONFIG.GRID_ROWS_INIT, cols: number = GAME_CONFIG.GRID_COLS_INIT): void {
         this._rows = rows;
-        this._cols = cols;
+        this._cols = GridManager.MAX_COLS; // 预分配最大列数
+        this._activeCount = rows * cols;   // 初始只激活 rows×cols 格
         this._grid = [];
 
-        for (let r = 0; r < rows; r++) {
+        for (let r = 0; r < this._rows; r++) {
             this._grid[r] = [];
-            for (let c = 0; c < cols; c++) {
+            for (let c = 0; c < this._cols; c++) {
                 this._grid[r][c] = { row: r, col: c, weaponLevel: null };
             }
         }
-        console.log(`[GridManager] 初始化 ${rows}×${cols} 格子`);
+        console.log(`[GridManager] 初始化 ${rows}×${cols} 格子（池: ${rows}×${GridManager.MAX_COLS}）`);
         this._notifyChange();
     }
 
@@ -73,7 +78,9 @@ export class GridManager extends Component {
     // ─────────────────────────────────────────────────────────────
 
     public get rows(): number { return this._rows; }
-    public get cols(): number { return this._cols; }
+    /** 当前激活的列数（向上取整，供布局使用） */
+    public get cols(): number { return Math.ceil(this._activeCount / this._rows); }
+    public get totalCols(): number { return this._cols; }
 
     public getCell(row: number, col: number): GridCell | null {
         if (!this._isValidPos(row, col)) return null;
@@ -89,20 +96,24 @@ export class GridManager extends Component {
         return this._grid.flat();
     }
 
-    /** 找第一个空格（左上到右下顺序） */
+    /** 找第一个空格（只在激活范围内找） */
     public findFirstEmpty(): GridCell | null {
+        if (!this._grid || this._grid.length === 0) return null;
+        let count = 0;
         for (let r = 0; r < this._rows; r++) {
+            if (!this._grid[r]) continue;
             for (let c = 0; c < this._cols; c++) {
-                if (this._grid[r][c].weaponLevel === null) {
-                    return this._grid[r][c];
-                }
+                if (count >= this._activeCount) return null;
+                if (this._grid[r][c]?.weaponLevel === null) return this._grid[r][c];
+                count++;
             }
         }
         return null;
     }
 
-    /** 是否有空格 */
+    /** 是否有空格（grid 未初始化时返回 true，避免按钮误禁用） */
     public hasEmptyCell(): boolean {
+        if (!this._grid || this._grid.length === 0) return true;
         return this.findFirstEmpty() !== null;
     }
 
@@ -220,7 +231,10 @@ export class GridManager extends Component {
     }
 
     private _notifyChange(): void {
-        this._changeCallbacks.forEach(cb => cb(this._grid));
+        // 只传激活列范围（cols = Math.ceil(activeCount/rows)）给 GridUI
+        const activeCols = this.cols;
+        const activeGrid = this._grid.map(row => row.slice(0, activeCols));
+        this._changeCallbacks.forEach(cb => cb(activeGrid));
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -229,5 +243,22 @@ export class GridManager extends Component {
 
     private _isValidPos(row: number, col: number): boolean {
         return row >= 0 && row < this._rows && col >= 0 && col < this._cols;
+    }
+
+    /** 新增一列空格（兼容旧接口） */
+    public expandCol(): void {
+        this._activeCount = Math.min(this._activeCount + this._rows, this._rows * this._cols);
+        console.log(`[GridManager] 扩展格子 → 激活 ${this._activeCount} 格（${this._rows}×${this.cols}）`);
+        this._notifyChange();
+    }
+
+    /** 每两波新增1个格子 */
+    public expandTwoCells(): void {
+        const maxActive = this._rows * this._cols;
+        if (this._activeCount < maxActive) {
+            this._activeCount += 1;
+            console.log(`[GridManager] 扩展格子 → 激活 ${this._activeCount} 格`);
+            this._notifyChange();
+        }
     }
 }
