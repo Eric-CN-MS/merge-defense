@@ -73,6 +73,11 @@ export class GameManager extends Component {
         this._initManagers();
         this._setState(GameState.WAVE_PREP);
         console.log('[GameManager] 初始化完成，进入准备阶段');
+
+        // 自动测试：挂载 AutoPlayer
+        const { AutoPlayer } = await import('../debug/AutoPlayer');
+        this.node.addComponent(AutoPlayer);
+        console.log('[GameManager] AutoPlayer 已挂载，开始自动测试');
     }
 
     /** 运行时修复 Camera，确保能渲染 Canvas/UI_2D 节点 */
@@ -162,7 +167,7 @@ export class GameManager extends Component {
     private _initManagers(): void {
         if (!this._playerState) return;
         // GridManager を先に初期化（ShopUI が hasEmptyCell を参照するため）
-        GridManager.instance?.init(GAME_CONFIG.GRID_ROWS_INIT, GAME_CONFIG.GRID_COLS_INIT);
+        GridManager.instance?.init(GAME_CONFIG.GRID_ROWS_INIT, GAME_CONFIG.GRID_COLS_INIT, this._weaponConfigs);
         this.economyManager?.init(this._playerState.gold);
     }
 
@@ -197,14 +202,24 @@ export class GameManager extends Component {
         if (this._playerState.currentWave > this._playerState.bestWave) {
             this._playerState.bestWave = this._playerState.currentWave;
         }
-        // 每 2 波扩展 2 个格子（调用两次 expandCol，各加1列=3格，共+2格用追加行方式）
+
+        // 每 2 波扩展 1 个格子
         if (this._playerState.currentWave % 2 === 0) {
             GridManager.instance?.expandTwoCells();
         }
+
         // 同步金币到存档
         this._playerState.gold = this.economyManager?.gold ?? this._playerState.gold;
         this.saveGame();
-        this._setState(GameState.WAVE_PREP);
+
+        // 判断是否已通关（下一波没有配置了）
+        const nextWave = this._playerState.currentWave + 1;
+        if (!this.getWaveConfig(nextWave)) {
+            console.log(`[GameManager] 恭喜通关！共 ${this._playerState.currentWave} 波`);
+            this._setState(GameState.GAME_OVER);  // 暂用 GAME_OVER，后续可加 VICTORY 状态
+        } else {
+            this._setState(GameState.WAVE_PREP);
+        }
     }
 
     /** 游戏失败 */
@@ -232,8 +247,18 @@ export class GameManager extends Component {
     // 配置查询 API
     // ─────────────────────────────────────────────────────────────
 
-    public getWeaponConfig(level: number): WeaponConfig | null {
-        return this._weaponConfigs.find(w => w.level === level) ?? null;
+    public getWeaponConfig(id: string): WeaponConfig | null {
+        return this._weaponConfigs.find(w => w.id === id) ?? null;
+    }
+
+    /** 按元素+形状+等级查找，用于购买 */
+    public getWeaponConfigByProps(element: string, shape: string, level: number): WeaponConfig | null {
+        return this._weaponConfigs.find(w => w.element === element && w.shape === shape && w.level === level) ?? null;
+    }
+
+    /** 获取所有1级武器（可购买的） */
+    public getLv1WeaponConfigs(): WeaponConfig[] {
+        return this._weaponConfigs.filter(w => w.level === 1 && w.cost > 0);
     }
 
     public getEnemyConfig(id: string): EnemyConfig | null {

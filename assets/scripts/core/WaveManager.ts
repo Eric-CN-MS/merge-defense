@@ -193,7 +193,7 @@ export class WaveManager extends Component {
      */
     public findTarget(worldX: number, worldY: number, range: number): Enemy | null {
         let target: Enemy | null = null;
-        let lowestY = Infinity;  // 选 Y 最小（最接近底部）的敌人，优先拦截
+        let lowestDist = Infinity;  // 选距离武器最近的敌人
 
         for (const enemy of this._activeEnemies) {
             if (!enemy.isActive) continue;
@@ -201,8 +201,8 @@ export class WaveManager extends Component {
             const dx = ep.x - worldX;
             const dy = ep.y - worldY;
             const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist <= range && ep.y < lowestY) {
-                lowestY = ep.y;
+            if (dist <= range && dist < lowestDist) {
+                lowestDist = dist;
                 target = enemy;
             }
         }

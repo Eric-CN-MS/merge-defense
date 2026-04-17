@@ -1,17 +1,25 @@
 /**
  * GameTypes.ts — 全局类型定义
- * 参照 data-model.md
  */
+
+/** 武器元素属性 */
+export type ElementType = 'fire' | 'lightning' | 'ice' | 'physical';
+
+/** 武器形状（行×列） */
+export type WeaponShape = '1x1' | '1x2' | '2x1' | '1x3' | '3x1';
 
 /** 武器配置（来自 weapons.json） */
 export interface WeaponConfig {
-    level: number;           // 1~5
+    id: string;              // 唯一标识，如 "fire_1x1_1"
+    element: ElementType;    // 元素属性
+    shape: WeaponShape;      // 占格形状
+    level: number;           // 1~3（每种武器最多3级）
     name: string;
     damage: number;
     attackSpeed: number;     // 攻击间隔（秒）
-    range: number;           // 攻击范围（像素）
-    cost: number;            // 购买价格（金币），合成得到的武器 cost=0
-    mergeTo: number | null;  // 合成后等级，null 表示最高级
+    range: number;
+    cost: number;            // 购买价格，合成得到的=0
+    mergeToId: string | null;// 合成后的武器 id，null=最高级
 }
 
 /** 敌人配置（来自 enemies.json） */
@@ -19,23 +27,23 @@ export interface EnemyConfig {
     id: string;
     name: string;
     hp: number;
-    speed: number;           // 移动速度（像素/秒）
-    reward: number;          // 击杀金币奖励
+    speed: number;
+    reward: number;
     type: 'normal' | 'elite' | 'boss';
 }
 
 /** 波次中单条敌人刷新指令 */
 export interface WaveEnemy {
-    enemyId: string;         // 对应 EnemyConfig.id
+    enemyId: string;
     count: number;
-    lane: number;            // 0=左, 1=中, 2=右
-    spawnInterval: number;   // 生成间隔（秒）
+    lane: number;
+    spawnInterval: number;
 }
 
 /** 波次配置（来自 waves.json） */
 export interface WaveConfig {
     waveNumber: number;
-    prepTime: number;        // 准备时间（秒）
+    prepTime: number;
     enemies: WaveEnemy[];
 }
 
@@ -45,10 +53,10 @@ export interface SkinConfig {
     name: string;
     skillName: string;
     skillDescription: string;
-    skillCooldown: number;   // 技能冷却（秒）
+    skillCooldown: number;
     skillEffect: 'aoe_damage' | 'slow' | 'buff_weapons' | 'heal';
-    skillPower: number;      // 技能强度（伤害值/倍率/比例）
-    price: number;           // 金币价格，0=默认免费
+    skillPower: number;
+    price: number;
     isDefault: boolean;
 }
 
@@ -56,45 +64,40 @@ export interface SkinConfig {
 export interface GridCell {
     row: number;
     col: number;
-    weaponLevel: number | null;  // null=空格
-    weaponNodeUuid?: string;     // 对应场景节点 UUID
+    weaponId: string | null;     // 武器 id（主格填 id，副格填 null）
+    rootRow: number | null;      // 副格：指向主格行（主格自身填 null）
+    rootCol: number | null;      // 副格：指向主格列（主格自身填 null）
+    weaponNodeUuid?: string;
 }
 
 /** 玩家存档数据 */
 export interface PlayerState {
-    gold: number;            // 当前金币
-    hp: number;              // 当前生命值（默认5）
+    gold: number;
+    hp: number;
     maxHp: number;
-    currentWave: number;     // 当前波次
-    bestWave: number;        // 历史最高波次
-    grid: GridCell[];        // 格子状态
-    unlockedSkins: string[]; // 已解锁皮肤 id 列表
-    currentSkinId: string;   // 当前使用皮肤 id
-}
-
-/** 英雄运行时状态 */
-export interface HeroState {
-    skinId: string;
-    skillCooldownRemaining: number;  // 剩余冷却时间（秒）
-    isSkillReady: boolean;
+    currentWave: number;
+    bestWave: number;
+    grid: GridCell[];
+    unlockedSkins: string[];
+    currentSkinId: string;
 }
 
 /** 游戏状态枚举 */
 export enum GameState {
-    IDLE = 'IDLE',             // 初始/菜单
-    WAVE_PREP = 'WAVE_PREP',   // 波次准备（购买/合成阶段）
-    WAVE_ACTIVE = 'WAVE_ACTIVE', // 战斗中
-    GAME_OVER = 'GAME_OVER',   // 失败
+    IDLE = 'IDLE',
+    WAVE_PREP = 'WAVE_PREP',
+    WAVE_ACTIVE = 'WAVE_ACTIVE',
+    GAME_OVER = 'GAME_OVER',
 }
 
-/** 游戏全局配置（运行时常量） */
+/** 游戏全局配置 */
 export const GAME_CONFIG = {
-    INITIAL_GOLD: 100,
+    INITIAL_GOLD: 5000,
     INITIAL_HP: 5,
-    WEAPON_COST: 50,           // 购买1级武器价格
+    WEAPON_COST: 50,
     GRID_ROWS_INIT: 3,
     GRID_COLS_INIT: 3,
-    MAX_WEAPON_LEVEL: 5,
+    MAX_WEAPON_LEVEL: 3,
     STORAGE_KEY: 'merge_defense_save',
     LANE_COUNT: 3,
 } as const;

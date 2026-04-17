@@ -1,4 +1,4 @@
-import { _decorator, Component, Label, Node, Sprite, Color, tween, Vec3, ProgressBar, Graphics, UITransform, Layers } from 'cc';
+import { _decorator, Component, Label, Node, Sprite, Color, tween, Vec3, ProgressBar, Graphics, UITransform } from 'cc';
 import { EnemyConfig } from '../types/GameTypes';
 import { EconomyManager } from '../core/EconomyManager';
 import { GameManager } from '../core/GameManager';
@@ -50,8 +50,14 @@ export class Enemy extends Component {
     private _onDeath: EnemyDeathCallback | null = null;
     private _onReachEnd: EnemyReachEndCallback | null = null;
 
-    // 减速倍率（技能 slow 使用）
-    private _speedMultiplier: number = 1.0;
+    // ─── 燃烧状态（fire 元素武器） ────────────────────────────────
+    private _burnTimer: number = 0;
+    private _burnDamage: number = 0;
+    private _burnInterval: number = 0.5;
+    private _burnTickTimer: number = 0;
+
+    // ─── 减速状态（ice 元素武器 / slow 技能） ────────────────────
+    private _slowMultiplier: number = 1.0;
     private _slowTimer: number = 0;
 
     // ─────────────────────────────────────────────────────────────
@@ -71,8 +77,11 @@ export class Enemy extends Component {
         this._active = true;
         this._onDeath = onDeath;
         this._onReachEnd = onReachEnd;
-        this._speedMultiplier = 1.0;
+        this._slowMultiplier = 1.0;
         this._slowTimer = 0;
+        this._burnTimer = 0;
+        this._burnDamage = 0;
+        this._burnTickTimer = 0;
 
         // 设置初始位置：X 随机，Y 从屏幕可见顶部出现（用世界坐标，避免父节点偏移）
         const xRange = Enemy.FIELD_X_MAX - Enemy.FIELD_X_MIN;
@@ -107,16 +116,31 @@ export class Enemy extends Component {
     update(dt: number) {
         if (!this._active || !this._config) return;
 
-        // 减速计时
+        // ── 减速计时 ────────────────────────────────────────────
         if (this._slowTimer > 0) {
             this._slowTimer -= dt;
             if (this._slowTimer <= 0) {
-                this._speedMultiplier = 1.0;
+                this._slowMultiplier = 1.0;
             }
         }
 
-        // 向下移动（用世界坐标，避免父节点影响）
-        const speed = this._config.speed * this._speedMultiplier;
+        // ── 燃烧计时（fire 元素武器） ────────────────────────────
+        if (this._burnTimer > 0) {
+            this._burnTimer -= dt;
+            this._burnTickTimer -= dt;
+            if (this._burnTickTimer <= 0) {
+                this._burnTickTimer = this._burnInterval;
+                this.takeDamage(this._burnDamage);
+            }
+            if (this._burnTimer <= 0) {
+                this._burnTimer = 0;
+                this._burnDamage = 0;
+                this._burnTickTimer = 0;
+            }
+        }
+
+        // ── 向下移动（用世界坐标，避免父节点影响） ─────────────────
+        const speed = this._config.speed * this._slowMultiplier;
         const wp = this.node.worldPosition;
         this.node.setWorldPosition(wp.x, wp.y - speed * dt, 0);
 
@@ -169,13 +193,29 @@ export class Enemy extends Component {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 技能效果
+    // 元素特效（由 Weapon 调用）
     // ─────────────────────────────────────────────────────────────
 
-    /** 减速（slow 技能） */
+    /**
+     * 燃烧效果（fire 元素武器）
+     * 每 0.5 秒造成 damagePerTick 点伤害，持续 duration 秒
+     * 重复施加时刷新持续时间（取较长者）
+     */
+    public applyBurn(damagePerTick: number, duration: number): void {
+        this._burnDamage = damagePerTick;
+        // 刷新持续时间（若已有燃烧，取较长者）
+        this._burnTimer = Math.max(this._burnTimer, duration);
+        // 首次触发立即开始计时
+        if (this._burnTickTimer <= 0) {
+            this._burnTickTimer = this._burnInterval;
+        }
+    }
+
+    /** 减速效果（ice 元素武器 / slow 技能） */
     public applySlow(multiplier: number, duration: number): void {
-        this._speedMultiplier = multiplier;
-        this._slowTimer = duration;
+        // 取减速效果最强的那个
+        this._slowMultiplier = Math.min(this._slowMultiplier, multiplier);
+        this._slowTimer = Math.max(this._slowTimer, duration);
     }
 
     // ─────────────────────────────────────────────────────────────

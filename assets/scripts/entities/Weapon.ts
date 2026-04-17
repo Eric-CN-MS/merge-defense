@@ -1,13 +1,14 @@
-import { _decorator, Component, Label, Sprite, Color, Node, Prefab, instantiate, tween, Vec3, Graphics, UITransform, Layers } from 'cc';
+import { _decorator, Component, Label, Sprite, Color, Node, Prefab, instantiate, tween, Vec3, Graphics, UITransform } from 'cc';
 import { WeaponConfig } from '../types/GameTypes';
 import { WaveManager } from '../core/WaveManager';
 import { Projectile } from './Projectile';
+import { Enemy } from './Enemy';
 
 const { ccclass, property } = _decorator;
 
 /**
  * Weapon — 武器实体组件
- * T014: 绑定 WeaponConfig，显示武器图标和等级
+ * 支持多格武器（1x1/1x2/1x3）和4种元素属性（physical/fire/lightning/ice）
  * 挂载到武器 Prefab 根节点
  */
 @ccclass('Weapon')
@@ -36,36 +37,65 @@ export class Weapon extends Component {
     private _row: number = -1;
     private _col: number = -1;
 
-    // ─── 自动攻击状态（T026）────────────────────────────────────────
+    // ─── 自动攻击状态 ────────────────────────────────────────────
     private _attackTimer: number = 0;
     private _attackEnabled: boolean = false;
     private _projectilePool: Projectile[] = [];
     // 武器攻击力临时加成（技能 buff_weapons）
     private _damageMultiplier: number = 1.0;
     private _buffTimer: number = 0;
+    // 武器在格子中的世界坐标（战斗时节点被移到底部图标，攻击仍以此坐标为基准）
+    private _gridWorldPos: Vec3 = new Vec3();
 
     // ─── CD 时钟 Graphics 缓存 ─────────────────────────────────────
     private _cdGraphics: Graphics | null = null;
 
-    // ─── 颜色映射（按等级） ────────────────────────────────────────
-    private static readonly LEVEL_COLORS: Color[] = [
-        new Color(100, 180, 100, 255),   // Lv1 — 绿色
-        new Color(100, 140, 220, 255),   // Lv2 — 蓝色
-        new Color(180, 100, 220, 255),   // Lv3 — 紫色
-        new Color(220, 160, 50, 255),    // Lv4 — 金色
-        new Color(220, 80, 80, 255),     // Lv5 — 红色
-    ];
+    // ─── 元素颜色映射 ─────────────────────────────────────────────
+    private static readonly ELEMENT_COLORS: Record<string, Color> = {
+        physical:  new Color(80,  120, 180, 255),
+        fire:      new Color(220, 80,  40,  255),
+        lightning: new Color(180, 160, 40,  255),
+        ice:       new Color(60,  160, 220, 255),
+    };
+
+    // ─── shape → 节点宽度映射 ────────────────────────────────────
+    private static readonly SHAPE_WIDTHS: Record<string, number> = {
+        '1x1': 90,
+        '1x2': 190,  // 90×2 + 10 gap
+        '2x1': 190,
+        '1x3': 290,  // 90×3 + 10×2 gap
+        '3x1': 290,
+    };
 
     // ─────────────────────────────────────────────────────────────
     // 初始化
     // ─────────────────────────────────────────────────────────────
 
-    /** 由 GridUI 调用，绑定武器配置 */
-    public init(config: WeaponConfig, row: number, col: number): void {
+    /**
+     * 由 GridUI 调用，绑定武器配置
+     * gridWorldPos: 格子中心世界坐标（由 GridUI 直接计算后传入，不依赖节点变换）
+     */
+    public init(config: WeaponConfig, row: number, col: number, gridWorldPos?: Vec3): void {
         this._config = config;
         this._row = row;
         this._col = col;
+        this._applyShape();
         this._refresh();
+        if (gridWorldPos) {
+            Vec3.copy(this._gridWorldPos, gridWorldPos);
+        }
+    }
+
+    /** 根据 shape 调整节点宽度，高度保持 UITransform 当前值 */
+    private _applyShape(): void {
+        if (!this._config) return;
+        const w = Weapon.SHAPE_WIDTHS[this._config.shape] ?? 90;
+        const uit = this.node.getComponent(UITransform);
+        if (uit) {
+            // 高度保留外部设定值（GridUI 已设好），只更新宽度
+            const h = uit.contentSize.height || 90;
+            uit.setContentSize(w, h);
+        }
     }
 
     private _refresh(): void {
@@ -81,19 +111,27 @@ export class Weapon extends Component {
             this.nameLabel.string = this._config.name;
         }
 
-        // 背景颜色 — 优先用 bgNode.Sprite，否则直接用 Graphics 画
-        const color = Weapon.LEVEL_COLORS[(this._config.level - 1) % Weapon.LEVEL_COLORS.length];
+        this._drawBackground();
+    }
+
+    /** 根据 element 绘制背景色 */
+    private _drawBackground(): void {
+        if (!this._config) return;
+        const color = Weapon.ELEMENT_COLORS[this._config.element]
+                   ?? Weapon.ELEMENT_COLORS['physical'];
+
+        // bgNode Sprite 着色
         if (this.bgNode) {
             const sprite = this.bgNode.getComponent(Sprite);
             if (sprite) sprite.color = color;
         }
 
-        // 始终尝试用 Graphics 在根节点画填充矩形（保证有背景色）
+        // 始终用 Graphics 在根节点画填充矩形
         let g = this.node.getComponent(Graphics);
         if (!g) g = this.node.addComponent(Graphics);
         const uit = this.node.getComponent(UITransform);
-        const w = uit ? uit.contentSize.width : 140;
-        const h = uit ? uit.contentSize.height : 140;
+        const w = uit ? uit.contentSize.width : 90;
+        const h = uit ? uit.contentSize.height : 90;
         g.clear();
         g.fillColor = color;
         g.roundRect(-w / 2, -h / 2, w, h, 12);
@@ -103,6 +141,18 @@ export class Weapon extends Component {
         g.lineWidth = 2;
         g.roundRect(-w / 2, -h / 2, w, h, 12);
         g.stroke();
+    }
+
+    /** 格子尺寸变化时重绘（由 GridUI._rebuildCells 调用） */
+    public redraw(size: number): void {
+        const uit = this.node.getComponent(UITransform);
+        if (this._config) {
+            const w = Weapon.SHAPE_WIDTHS[this._config.shape] ?? size;
+            if (uit) uit.setContentSize(w, size);
+        } else {
+            if (uit) uit.setContentSize(size, size);
+        }
+        this._refresh();
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -120,7 +170,7 @@ export class Weapon extends Component {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // T026: 自动攻击
+    // 自动攻击
     // ─────────────────────────────────────────────────────────────
 
     /** 启用/禁用自动攻击（波次开始/结束时切换） */
@@ -154,14 +204,14 @@ export class Weapon extends Component {
     private _drawCdClock(progress: number): void {
         if (!this._cdGraphics) {
             const cdNode = new Node('CDOverlay');
-            cdNode.layer = Layers.Enum.UI_2D;
+            cdNode.layer = 1 << 25; // UI_2D layer
             this.node.addChild(cdNode);
             const uit = cdNode.addComponent(UITransform);
-            uit.setContentSize(140, 140);
+            uit.setContentSize(90, 90);
             this._cdGraphics = cdNode.addComponent(Graphics);
         }
         const g = this._cdGraphics;
-        const r = 60; // 扇形半径（略小于格子）
+        const r = 36; // 扇形半径（略小于格子）
         g.clear();
 
         if (progress > 0.01) {
@@ -170,7 +220,6 @@ export class Weapon extends Component {
             const endAngle = startAngle - progress * Math.PI * 2; // 顺时针
             g.fillColor = new Color(0, 0, 0, 120);
             g.moveTo(0, 0);
-            // arc 参数: cx, cy, r, startAngle, endAngle, counterClockwise
             g.arc(0, 0, r, startAngle, endAngle, true);
             g.lineTo(0, 0);
             g.fill();
@@ -188,14 +237,61 @@ export class Weapon extends Component {
         const wm = WaveManager.instance;
         if (!wm) return;
 
-        const wp = this.node.worldPosition;
-        const target = wm.findTarget(wp.x, wp.y, this._config.range);
+        // 用格子坐标寻敌（而非节点实时位置——战斗图标时节点被移到底部）
+        const wx = this._gridWorldPos.x;
+        const wy = this._gridWorldPos.y;
+        const target = wm.findTarget(wx, wy, this._config.range);
         if (!target) return;
 
         this._fireProjectile(target);
+
+        // 元素特效
+        this._applyElementEffect(target);
     }
 
-    private _fireProjectile(target: any): void {
+    /** 根据 element 对命中目标施加特效 */
+    private _applyElementEffect(target: Enemy): void {
+        if (!this._config) return;
+        const wm = WaveManager.instance;
+
+        switch (this._config.element) {
+            case 'fire':
+                // 燃烧：每0.5秒10点伤害，持续2秒
+                target.applyBurn(10, 2.0);
+                break;
+
+            case 'lightning': {
+                // 溅射：找3格（世界坐标约270px）范围内其他敌人，各造成50%伤害
+                if (!wm) break;
+                const splashDamage = Math.round(this._config.damage * this._damageMultiplier * 0.5);
+                const wp = this.node.worldPosition;
+                const splashRange = 270; // 约3格
+                const enemies = wm.activeEnemies ?? [];
+                for (const e of enemies) {
+                    if (e === target || !e.isActive) continue;
+                    const ep = e.node.worldPosition;
+                    const dx = ep.x - wp.x;
+                    const dy = ep.y - wp.y;
+                    if (Math.sqrt(dx * dx + dy * dy) <= splashRange) {
+                        e.takeDamage(splashDamage);
+                    }
+                }
+                break;
+            }
+
+            case 'ice':
+                // 减速：速度×0.5，持续2秒
+                target.applySlow(0.5, 2.0);
+                break;
+
+            case 'physical':
+            default:
+                // 无特效
+                break;
+        }
+    }
+
+    private _fireProjectile(target: Enemy): void {
         if (!this._config) return;
         const container = this.projectileContainer;
         if (!container || !this.projectilePrefab) return;
@@ -204,7 +300,7 @@ export class Weapon extends Component {
         let proj = this._projectilePool.pop() ?? null;
         if (!proj) {
             const node = instantiate(this.projectilePrefab);
-            node.layer = Layers.Enum.UI_2D;
+            node.layer = 1 << 25; // UI_2D layer
             container.addChild(node);
             proj = node.getComponent(Projectile);
             if (!proj) {
@@ -212,18 +308,18 @@ export class Weapon extends Component {
                 return;
             }
         } else {
-            proj.node.layer = Layers.Enum.UI_2D;
+            proj.node.layer = 1 << 25; // UI_2D layer
             container.addChild(proj.node);
         }
 
-        // 从武器位置出发
-        proj.node.setWorldPosition(this.node.worldPosition);
+        // 发射起点：格子中心（_gridWorldPos 即为格子中心世界坐标）
+        proj.node.setWorldPosition(this._gridWorldPos);
 
         const damage = Math.round(this._config.damage * this._damageMultiplier);
         proj.init(target, damage, (p) => {
             p.reset();
             this._projectilePool.push(p);
-        });
+        }, 800, this._config.element);
     }
 
     /** 临时增益（技能 buff_weapons） */
@@ -232,8 +328,13 @@ export class Weapon extends Component {
         this._buffTimer = duration;
     }
 
+    /** 刷新格子世界坐标（归位动画结束后由 GridUI 调用） */
+    public refreshGridWorldPos(): void {
+        Vec3.copy(this._gridWorldPos, this.node.worldPosition);
+    }
+
     // ─────────────────────────────────────────────────────────────
-    // T018: 动画效果
+    // 动画效果
     // ─────────────────────────────────────────────────────────────
 
     /** 合成成功动画：弹出缩放 + 淡入 */

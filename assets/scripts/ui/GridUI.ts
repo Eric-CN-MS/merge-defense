@@ -1,9 +1,9 @@
-import {
+﻿import {
     _decorator, Component, Node, Prefab, instantiate,
     Vec2, Vec3, UITransform, EventTouch, Input, input,
     tween, v3, CCFloat, CCInteger, Graphics, Color
 } from 'cc';
-import { GridCell, GAME_CONFIG, GameState } from '../types/GameTypes';
+import { GridCell, WeaponConfig, GAME_CONFIG, GameState } from '../types/GameTypes';
 import { GridManager } from '../core/GridManager';
 import { GameManager } from '../core/GameManager';
 import { Weapon } from '../entities/Weapon';
@@ -38,7 +38,8 @@ export class GridUI extends Component {
     public projectileContainer: Node | null = null; // 子弹容器（注入给 Weapon）
 
     @property(CCFloat)
-    public cellSize: number = 160;               // 格子尺寸（像素）
+    public cellSize: number = 90;               // 格子尺寸（像素），scene里可覆盖
+    private get BASE_CELL_SIZE() { return this.cellSize; }  // 始终与scene值一致
 
     @property(CCFloat)
     public cellGap: number = 10;                 // 格子间距
@@ -46,6 +47,14 @@ export class GridUI extends Component {
     // ─── 运行时状态 ───────────────────────────────────────────────
     private _cellNodes: Node[][] = [];           // 格子背景节点
     private _weaponNodes: (Node | null)[][] = [];// 武器节点（null=空格）
+    private _lastActiveCount: number = 0;        // 上次渲染时的 activeCount
+    private _inBattle: boolean = false;           // 战斗中：背景全隐藏
+
+    // 备用格（Stash）
+    private _stashBgNode: Node | null = null;    // 备用格背景节点（程序创建）
+    private _stashWeaponId: string | null = null;// 备用格当前武器id
+    private _stashWeaponNode: Node | null = null;// 备用格武器节点
+    private _dragFromStash: boolean = false;     // 本次拖拽来自备用格
 
     // 拖拽状态
     private _dragging: boolean = false;
@@ -61,7 +70,9 @@ export class GridUI extends Component {
     // ─────────────────────────────────────────────────────────────
 
     start() {
+        // gridContainer 的位置由 scene 设定，代码里不移动
         this._buildGrid();
+        this._buildStashCell();
         this._registerTouchEvents();
 
         // 监听 GridManager 格子变化
@@ -69,6 +80,14 @@ export class GridUI extends Component {
 
         // 监听波次状态，切换武器自动攻击
         GameManager.instance?.onStateChange(this._onStateChange.bind(this));
+
+        // 兜底：1帧后如果格子还没渲染（GridManager 异步 init）则强制重建
+        this.scheduleOnce(() => {
+            if (this._lastActiveCount === 0 && (GridManager.instance?.activeCount ?? 0) > 0) {
+                console.log('[GridUI] 兜底触发 _rebuildCells');
+                this._rebuildCells();
+            }
+        }, 0.1);
     }
 
     onDestroy() {
@@ -79,84 +98,220 @@ export class GridUI extends Component {
     // T016: 渲染格子
     // ─────────────────────────────────────────────────────────────
 
+    /** 根据当前列数自动计算 cellSize，保证格子区域不超出屏幕宽度 */
+    private _calcCellSize(cols: number): number {
+        // cellSize 固定不变，始终用初始格子尺寸
+        // 新格子追加到右侧，不缩放原有格子
+        return this.BASE_CELL_SIZE;
+    }
+
+    /** 计算格子的本地坐标（相对 gridContainer），以左上角为原点向右下排列 */
+    private _getCellLocalPos(r: number, c: number): Vec3 {
+        const step = this.cellSize + this.cellGap;
+        // 以 4×4 格子区域中心为原点，向右上排列
+        // 格子区域总宽/高 = 4*step - gap = 3*step + cellSize
+        const totalW = 3 * step + this.cellSize;  // = 3*100+90 = 390
+        const totalH = 3 * step + this.cellSize;
+        const x = -totalW / 2 + c * step + this.cellSize / 2;
+        const y =  totalH / 2 - r * step - this.cellSize / 2;
+        return new Vec3(x, y, 0);
+    }
+
     private _buildGrid(): void {
         const gm = GridManager.instance;
         if (!gm || !this.gridContainer) return;
+        const rows = gm.rows;   // 固定 4
+        const cols = gm.cols;   // 固定 4
+        this.cellSize = this.BASE_CELL_SIZE;
+        this._lastActiveCount = gm.activeCount;
 
-        const rows = gm.rows;
-        const cols = gm.cols;
+        // gridContainer 位置由 scene 决定，不在代码里移动
 
-        this._cellNodes = [];
-        this._weaponNodes = [];
-
+        // 先全部初始化为 null，再按激活状态创建节点
+        this._cellNodes = Array.from({ length: rows }, () => new Array(cols).fill(null));
+        this._weaponNodes = Array.from({ length: rows }, () => new Array(cols).fill(null));
         for (let r = 0; r < rows; r++) {
-            this._cellNodes[r] = [];
-            this._weaponNodes[r] = [];
             for (let c = 0; c < cols; c++) {
-                this._cellNodes[r][c] = this._buildCell(r, c);
-                this._weaponNodes[r][c] = null;
+                if (gm.isActive(r, c)) {
+                    this._cellNodes[r][c] = this._buildCell(r, c, true);
+                }
             }
         }
-        console.log(`[GridUI] 格子渲染完成 ${rows}×${cols}`);
+        console.log(`[GridUI] 格子渲染完成 4×4，激活 ${gm.activeCount} 格，容器位置=${JSON.stringify(this.PREP_POS)}`);
     }
 
     /** 创建单个格子背景节点并加入 gridContainer */
-    private _buildCell(r: number, c: number): Node {
-        const gm = GridManager.instance!;
-        const cols = gm.cols;
-        const rows = gm.rows;
-        const step = this.cellSize + this.cellGap;
-        const offsetX = -((cols - 1) * step) / 2;
-        const offsetY = ((rows - 1) * step) / 2;
-        const x = offsetX + c * step;
-        const y = offsetY - r * step;
+    private _buildCell(r: number, c: number, isActive: boolean): Node | null {
+        if (!isActive) return null;   // 未解锁的格子不渲染，位置留空
+
+        const localPos = this._getCellLocalPos(r, c);
 
         let cellNode: Node;
         if (this.cellPrefab) {
             cellNode = instantiate(this.cellPrefab);
         } else {
             cellNode = new Node(`cell_${r}_${c}`);
-            cellNode.layer = 1 << 25; // UI_2D
+            cellNode.layer = 1 << 25;  // UI_2D
             const uit = cellNode.addComponent(UITransform);
             uit.setContentSize(this.cellSize, this.cellSize);
             const g = cellNode.addComponent(Graphics);
             g.fillColor = new Color(40, 50, 70, 200);
+            g.lineWidth = 2;
+            g.strokeColor = new Color(80, 120, 180, 180);
             g.roundRect(-this.cellSize / 2, -this.cellSize / 2, this.cellSize, this.cellSize, 10);
             g.fill();
-            g.strokeColor = new Color(80, 120, 180, 180);
-            g.lineWidth = 2;
             g.roundRect(-this.cellSize / 2, -this.cellSize / 2, this.cellSize, this.cellSize, 10);
             g.stroke();
         }
-        cellNode.setPosition(x, y, 0);
+        cellNode.setPosition(localPos);
         this.gridContainer!.addChild(cellNode);
+        // 背景格永远在底层，武器节点渲染在上方
+        cellNode.setSiblingIndex(0);
         return cellNode;
     }
 
-    /** GridManager 数据变化时刷新视图 */
-    private _onGridChange(grid: GridCell[][]): void {
-        // 如果格子尺寸变了，先重建背景
-        const newRows = grid.length;
-        const newCols = grid[0]?.length ?? 0;
-        const curRows = this._cellNodes.length;
-        const curCols = this._cellNodes[0]?.length ?? 0;
-        if (newRows !== curRows || newCols !== curCols) {
-            this._rebuildCells();
-            return; // _rebuildCells 内部会重新定位武器，无需再 sync
+    // ─────────────────────────────────────────────────────────────
+    // 备用格（Stash）
+    // ─────────────────────────────────────────────────────────────
+
+    /** 创建左侧备用格背景节点（挂在 gridContainer 下，位置在格子区域左侧） */
+    private _buildStashCell(): void {
+        if (!this.gridContainer) return;
+        const step = this.cellSize + this.cellGap;
+        const totalW = 3 * step + this.cellSize;
+        // 备用格坐标：格子区域左边缘再向左一格+间隙
+        const stashX = -totalW / 2 - this.cellGap - this.cellSize / 2;
+        const stashY = 0;   // 垂直居中
+
+        const bg = new Node('StashCell');
+        bg.layer = 1 << 25;
+        const uit = bg.addComponent(UITransform);
+        uit.setContentSize(this.cellSize, this.cellSize);
+        const g = bg.addComponent(Graphics);
+        // 备用格用偏暖的棕色区分
+        g.fillColor = new Color(80, 60, 40, 200);
+        g.lineWidth = 2;
+        g.strokeColor = new Color(180, 140, 80, 200);
+        const s = this.cellSize;
+        g.roundRect(-s / 2, -s / 2, s, s, 10);
+        g.fill();
+        g.roundRect(-s / 2, -s / 2, s, s, 10);
+        g.stroke();
+
+        bg.setPosition(stashX, stashY, 0);
+        this.gridContainer.addChild(bg);
+        bg.setSiblingIndex(0);
+        this._stashBgNode = bg;
+    }
+
+    /** 备用格的本地坐标（相对 gridContainer） */
+    private _getStashLocalPos(): Vec3 {
+        const step = this.cellSize + this.cellGap;
+        const totalW = 3 * step + this.cellSize;
+        const stashX = -totalW / 2 - this.cellGap - this.cellSize / 2;
+        return new Vec3(stashX, 0, 0);
+    }
+
+    /** 判断屏幕坐标是否命中备用格 */
+    private _hitTestStash(screenPos: Vec2): boolean {
+        if (!this.gridContainer || !this._stashBgNode) return false;
+        const worldPos = new Vec3();
+        this._stashBgNode.getWorldPosition(worldPos);
+        const dx = Math.abs(screenPos.x - worldPos.x);
+        const dy = Math.abs(screenPos.y - worldPos.y);
+        return dx <= this.cellSize / 2 && dy <= this.cellSize / 2;
+    }
+
+    /** 同步备用格视图（数据从 GridManager.stashWeaponId 读取） */
+    private _syncStashView(): void {
+        const gm = GridManager.instance;
+        if (!gm) return;
+        const stashId = gm.stashWeaponId;
+
+        if (stashId === this._stashWeaponId) return; // 无变化
+
+        // 销毁旧节点
+        if (this._stashWeaponNode?.isValid) {
+            this._stashWeaponNode.destroy();
+            this._stashWeaponNode = null;
         }
+        this._stashWeaponId = stashId;
+
+        if (stashId === null) return;
+
+        // 创建新武器节点
+        const config = GameManager.instance?.getWeaponConfig(stashId);
+        if (!config || !this.weaponPrefab || !this.gridContainer) return;
+
+        const node = instantiate(this.weaponPrefab);
+        this.gridContainer.addChild(node);
+        const uit = node.getComponent(UITransform);
+        if (uit) uit.setContentSize(this.cellSize, this.cellSize);
+        node.setPosition(this._getStashLocalPos());
+        node.setScale(1, 1, 1);
+        const weapon = node.getComponent(Weapon);
+        weapon?.init(config, -1, -1);   // row/col=-1 表示备用格
+        if (weapon && this.projectilePrefab) weapon.projectilePrefab = this.projectilePrefab;
+        if (weapon && this.projectileContainer) weapon.projectileContainer = this.projectileContainer;
+        weapon?.setAttackEnabled(false); // 备用格武器不攻击
+        this._stashWeaponNode = node;
+    }
+
+    /** GridManager 数据变化时刷新视图 */
+    private _onGridChange(grid: GridCell[][], activeKeys: Set<string>): void {
+        const gm = GridManager.instance;
+        if (!gm) return;
+        const newActive = gm.activeCount;
+        const curActive = this._lastActiveCount;
+
+        // 同步备用格视图
+        this._syncStashView();
+
+        // activeCount 变了（有新格子解锁）→ 重建背景
+        if (newActive !== curActive) {
+            this._lastActiveCount = newActive;
+            this._rebuildCells();
+            return;
+        }
+        // 只更新武器节点（只更新激活格子）
         for (let r = 0; r < grid.length; r++) {
             for (let c = 0; c < grid[r].length; c++) {
-                this._syncCell(grid[r][c]);
+                if (activeKeys.has(`${r},${c}`)) {
+                    this._syncCell(grid[r][c]);
+                }
+            }
+        }
+        // 同步副格背景可见性（副格有武器占用时，隐藏自己的背景格）
+        this._syncSubCellVisibility(grid);
+    }
+
+    /** 副格背景隐藏：当格子是副格（rootRow !== null）时，隐藏背景节点 */
+    private _syncSubCellVisibility(grid: GridCell[][]): void {
+        // 战斗中背景由 enterBattleLayout 统一隐藏，不在这里干预
+        if (this._inBattle) return;
+        for (let r = 0; r < 4; r++) {
+            for (let c = 0; c < 4; c++) {
+                const cell = grid[r]?.[c];
+                const bg = this._cellNodes[r]?.[c];
+                if (!bg) continue;
+                // 副格（被多格武器占用）→ 隐藏背景
+                if (cell && cell.rootRow !== null) {
+                    bg.active = false;
+                } else {
+                    bg.active = true;
+                }
             }
         }
     }
 
     private _syncCell(cell: GridCell): void {
-        const { row, col, weaponLevel } = cell;
-        const existingNode = this._weaponNodes[row]?.[col];
+        const { row, col, weaponId, rootRow } = cell;
+        // 安全守卫：数组未初始化时跳过
+        if (!this._weaponNodes[row]) return;
+        const existingNode = this._weaponNodes[row][col] ?? null;
 
-        if (weaponLevel === null) {
-            // 清除武器节点
+        // 副格（rootRow !== null）：不独立渲染节点，跟随主格；确保无孤立节点
+        if (rootRow !== null) {
             if (existingNode) {
                 existingNode.destroy();
                 this._weaponNodes[row][col] = null;
@@ -164,34 +319,74 @@ export class GridUI extends Component {
             return;
         }
 
-        // 已有正确等级的武器，不需要重建
+        if (weaponId === null) {
+            // 空主格：清除武器节点
+            if (existingNode) {
+                existingNode.destroy();
+                this._weaponNodes[row][col] = null;
+            }
+            return;
+        }
+
+        // 已有正确 id 的武器，不需要重建
         if (existingNode) {
             const weapon = existingNode.getComponent(Weapon);
-            if (weapon?.level === weaponLevel) return;
+            if (weapon?.config?.id === weaponId) return;
             existingNode.destroy();
         }
 
         // 创建新武器节点
-        this._spawnWeaponNode(row, col, weaponLevel);
+        this._spawnWeaponNode(row, col, weaponId);
     }
 
-    private _spawnWeaponNode(row: number, col: number, level: number): Node | null {
+    private _spawnWeaponNode(row: number, col: number, weaponId: string): Node | null {
         if (!this.weaponPrefab || !this.gridContainer) return null;
 
-        const config = GameManager.instance?.getWeaponConfig(level);
+        const config = GameManager.instance?.getWeaponConfig(weaponId);
         if (!config) return null;
+
+        // 防重复：如果该格已有节点，先销毁
+        const oldNode = this._weaponNodes[row]?.[col];
+        if (oldNode?.isValid) {
+            console.warn(`[GridUI] spawn 前发现残留节点 (${row},${col})，强制销毁`);
+            oldNode.destroy();
+            this._weaponNodes[row][col] = null;
+        }
 
         const node = instantiate(this.weaponPrefab);
         this.gridContainer.addChild(node);
-        const cellPos = this._getCellWorldPos(row, col);
-        node.setWorldPosition(cellPos);
+
+        // 根据 shape 计算实际宽度（1x1=cellSize, 1x2=cellSize*2+gap, 1x3=cellSize*3+gap*2）
+        const shapeWidth = this._getShapePixelWidth(config.shape);
+        const uit = node.getComponent(UITransform);
+        if (uit) uit.setContentSize(shapeWidth, this.cellSize);
+
+        // 计算本地坐标：主格中心 + 多格武器向右偏移
+        const step = this.cellSize + this.cellGap;  // 局部变量，不依赖 this.step
+        const span = config.shape === '1x3' || config.shape === '3x1' ? 3
+                   : config.shape === '1x2' || config.shape === '2x1' ? 2 : 1;
+        const localPos = this._getCellLocalPos(row, col);
+        const offsetX = (span - 1) * step / 2;
+        node.setPosition(localPos.x + offsetX, localPos.y, 0);
+
+        // 直接用已知参数算出格子中心世界坐标，不依赖 node.worldPosition 时序
+        const cellWorldPos = this._getCellWorldPos(row, col);
+        // 多格武器水平中心 = 主格中心 + offsetX（在 local 空间和 world 空间比例一致）
+        cellWorldPos.x += offsetX;
 
         const weapon = node.getComponent(Weapon);
-        weapon?.init(config, row, col);
-        // 注入子弹资源（weapon 需要但不存在于 prefab 绑定中）
+        weapon?.init(config, row, col, cellWorldPos);
         if (weapon && this.projectilePrefab) weapon.projectilePrefab = this.projectilePrefab;
         if (weapon && this.projectileContainer) weapon.projectileContainer = this.projectileContainer;
-        weapon?.playSpawnAnimation();
+
+        // 出生动画（scale 从 0 弹出）
+        node.setScale(0, 0, 1);
+        this.scheduleOnce(() => {
+            if (!node.isValid) return;
+            node.getComponent(Weapon)?.playSpawnAnimation();
+            // 出生动画完成后再次确认世界坐标（保险）
+            node.getComponent(Weapon)?.refreshGridWorldPos();
+        }, 0);
 
         this._weaponNodes[row][col] = node;
         return node;
@@ -210,6 +405,35 @@ export class GridUI extends Component {
 
     private _onTouchStart(event: EventTouch): void {
         const touchPos = event.getUILocation();
+
+        // 优先检测备用格
+        if (this._stashWeaponNode?.isValid && this._hitTestStash(touchPos)) {
+            const weapon = this._stashWeaponNode.getComponent(Weapon);
+            if (!weapon) return;
+            this._dragging = true;
+            this._dragWeapon = weapon;
+            this._dragNode = this._stashWeaponNode;
+            this._dragFromStash = true;
+            this._dragOriginRow = -1;
+            this._dragOriginCol = -1;
+            this._dragOriginPos = this._stashWeaponNode.position.clone();
+
+            const worldPos = new Vec3();
+            this._stashWeaponNode.getWorldPosition(worldPos);
+            this._dragOffset.set(worldPos.x - touchPos.x, worldPos.y - touchPos.y, 0);
+
+            if (this.dragLayer) {
+                const wp = new Vec3();
+                this._stashWeaponNode.getWorldPosition(wp);
+                this.dragLayer.addChild(this._stashWeaponNode);
+                this._stashWeaponNode.setWorldPosition(wp);
+            }
+            weapon.setDragging(true);
+            event.propagationStopped = true;
+            return;
+        }
+
+        // 检测主格武器
         const result = this._hitTestWeapon(touchPos);
         if (!result) return;
 
@@ -217,6 +441,7 @@ export class GridUI extends Component {
         this._dragging = true;
         this._dragWeapon = weapon;
         this._dragNode = node;
+        this._dragFromStash = false;
         this._dragOriginRow = row;
         this._dragOriginCol = col;
         this._dragOriginPos = node.position.clone();
@@ -254,61 +479,153 @@ export class GridUI extends Component {
         if (!this._dragging || !this._dragNode || !this._dragWeapon) return;
 
         const touchPos = event.getUILocation();
-        const targetCell = this._screenPosToCell(touchPos);
-
         this._dragWeapon.setDragging(false);
+
+        // ── 判断是否拖入弃用区（格子区域下方 80px 以内） ──────────
+        const isDiscard = this._isDiscardZone(touchPos);
+        if (isDiscard) {
+            this._discardDragging();
+            this._resetDragState();
+            return;
+        }
+
+        // ── 判断是否拖入备用格 ──────────────────────────────────────
+        const toStash = this._hitTestStash(touchPos);
+        if (toStash && !this._dragFromStash) {
+            // 主格 → 备用格：通过 GridManager
+            const weaponId = this._dragWeapon.config?.id;
+            if (weaponId) {
+                // GridManager 处理数据（备用格原武器弃用、主格清空）
+                GridManager.instance?.moveToStash(this._dragOriginRow, this._dragOriginCol);
+                // 节点先销毁，_syncStashView 在 _onGridChange 里会重建备用格节点
+                this._dragNode.destroy();
+                this._weaponNodes[this._dragOriginRow][this._dragOriginCol] = null;
+            } else {
+                this._returnToOrigin();
+            }
+            this._resetDragState();
+            return;
+        }
+
+        const targetCell = this._screenPosToCell(touchPos);
 
         if (targetCell) {
             const { row: toRow, col: toCol } = targetCell;
-            const result = GridManager.instance?.tryMerge(
-                this._dragOriginRow, this._dragOriginCol,
-                toRow, toCol
-            );
 
-            if (result === 'merged') {
-                // 合成成功：来源格已清空，目标格会重建节点
-                this._dragNode.destroy();
-                this._weaponNodes[this._dragOriginRow][this._dragOriginCol] = null;
-                // 播放目标格的合成动画
-                const targetWeapon = this._weaponNodes[toRow]?.[toCol]?.getComponent(Weapon);
-                targetWeapon?.playMergeAnimation();
+            if (this._dragFromStash) {
+                // 备用格 → 主格
+                const gm = GridManager.instance;
+                const grid = gm?.getGrid();
+                const targetData = grid?.[toRow]?.[toCol];
 
-            } else if (result === 'swapped') {
-                // 移动到空格：将节点移回 gridContainer 并对齐
-                const targetPos = this._getCellWorldPos(toRow, toCol);
-                if (this.gridContainer) this.gridContainer.addChild(this._dragNode);
-                this._dragNode.setWorldPosition(targetPos);
-                this._dragWeapon.setGridPos(toRow, toCol);
-                this._weaponNodes[this._dragOriginRow][this._dragOriginCol] = null;
-                this._weaponNodes[toRow][toCol] = this._dragNode;
-
+                if (targetData?.weaponId === null && targetData?.rootRow === null) {
+                    // 目标空格：GridManager.moveFromStash 搞定数据
+                    // 节点先销毁，_syncStashView 清掉备用格，_syncCell 在主格创建新节点
+                    this._dragNode.destroy();
+                    this._stashWeaponNode = null;
+                    gm?.moveFromStash(toRow, toCol);
+                } else if (targetData?.weaponId === this._stashWeaponId) {
+                    // 相同武器：合成
+                    const result = gm?.tryMergeFromStash(toRow, toCol, this._stashWeaponId!);
+                    if (result === 'merged') {
+                        this._dragNode.destroy();
+                        this._stashWeaponNode = null;
+                        const targetWeapon = this._weaponNodes[toRow]?.[toCol]?.getComponent(Weapon);
+                        targetWeapon?.playMergeAnimation();
+                    } else {
+                        this._returnToStash();
+                    }
+                } else {
+                    this._returnToStash();
+                }
             } else {
-                // 失败：回原位
-                this._returnToOrigin();
+                // 主格 → 主格
+                const result = GridManager.instance?.tryMerge(
+                    this._dragOriginRow, this._dragOriginCol,
+                    toRow, toCol
+                );
+
+                if (result === 'merged') {
+                    this._dragNode.destroy();
+                    this._weaponNodes[this._dragOriginRow][this._dragOriginCol] = null;
+                    const targetWeapon = this._weaponNodes[toRow]?.[toCol]?.getComponent(Weapon);
+                    targetWeapon?.playMergeAnimation();
+
+                } else if (result === 'swapped') {
+                    const span = this._dragWeapon.config?.shape === '1x3' || this._dragWeapon.config?.shape === '3x1' ? 3
+                               : this._dragWeapon.config?.shape === '1x2' || this._dragWeapon.config?.shape === '2x1' ? 2 : 1;
+                    const step = this.cellSize + this.cellGap;
+                    const localPos = this._getCellLocalPos(toRow, toCol);
+                    if (this.gridContainer) this.gridContainer.addChild(this._dragNode);
+                    this._dragNode.setPosition(localPos.x + (span - 1) * step / 2, localPos.y, 0);
+                    this._dragWeapon.setGridPos(toRow, toCol);
+                    this._weaponNodes[this._dragOriginRow][this._dragOriginCol] = null;
+                    this._weaponNodes[toRow][toCol] = this._dragNode;
+
+                } else {
+                    this._returnToOrigin();
+                }
             }
         } else {
-            // 没有放到有效格子：回原位
-            this._returnToOrigin();
+            if (this._dragFromStash) {
+                this._returnToStash();
+            } else {
+                this._returnToOrigin();
+            }
         }
 
         this._resetDragState();
     }
 
+    /** 判断是否在弃用区（格子区域下方 80px） */
+    private _isDiscardZone(screenPos: Vec2): boolean {
+        if (!this.gridContainer) return false;
+        const worldPos = new Vec3();
+        this.gridContainer.getWorldPosition(worldPos);
+        const step = this.cellSize + this.cellGap;
+        const totalH = 3 * step + this.cellSize;
+        const bottomEdge = worldPos.y - totalH / 2;
+        // 在格子底部 80px 以下，且 X 大致在格子范围内
+        const totalW = 3 * step + this.cellSize;
+        const inX = Math.abs(screenPos.x - worldPos.x) <= totalW / 2 + 60;
+        return screenPos.y < bottomEdge - 10 && screenPos.y > bottomEdge - 80 && inX;
+    }
+
+    /** 弃用正在拖拽的武器 */
+    private _discardDragging(): void {
+        if (!this._dragNode || !this._dragWeapon) return;
+        const nodeToDestroy = this._dragNode;
+        if (this._dragFromStash) {
+            // 从备用格弃用 → GridManager 清空备用格
+            GridManager.instance?.clearStash();
+            this._stashWeaponNode = null;
+        } else {
+            // 从主格弃用
+            GridManager.instance?.removeWeapon(this._dragOriginRow, this._dragOriginCol);
+            this._weaponNodes[this._dragOriginRow][this._dragOriginCol] = null;
+        }
+        tween(nodeToDestroy)
+            .to(0.2, { scale: new Vec3(0, 0, 1) })
+            .call(() => { nodeToDestroy.isValid && nodeToDestroy.destroy(); })
+            .start();
+    }
+
+    /** 备用格武器回原位 */
+    private _returnToStash(): void {
+        if (!this._dragNode || !this.gridContainer) return;
+        this.gridContainer.addChild(this._dragNode);
+        const pos = this._getStashLocalPos();
+        this._stashWeaponNode = this._dragNode;
+        tween(this._dragNode)
+            .to(0.2, { position: pos, scale: new Vec3(1, 1, 1) }, { easing: 'cubicOut' })
+            .start();
+    }
+
     /** 武器回原位动画 */
     private _returnToOrigin(): void {
         if (!this._dragNode || !this._dragWeapon) return;
-
-        const originWorldPos = new Vec3();
-        const originRow = this._dragOriginRow;
-        const originCol = this._dragOriginCol;
-
-        // 算出原格子世界坐标
-        const worldPos = this._getCellWorldPos(originRow, originCol);
-
-        // 把节点移回 gridContainer
         if (this.gridContainer) this.gridContainer.addChild(this._dragNode);
-        this._weaponNodes[originRow][originCol] = this._dragNode;
-
+        this._weaponNodes[this._dragOriginRow][this._dragOriginCol] = this._dragNode;
         this._dragWeapon.playReturnAnimation(this._dragOriginPos);
     }
 
@@ -316,6 +633,7 @@ export class GridUI extends Component {
         this._dragging = false;
         this._dragWeapon = null;
         this._dragNode = null;
+        this._dragFromStash = false;
         this._dragOriginRow = -1;
         this._dragOriginCol = -1;
     }
@@ -324,35 +642,37 @@ export class GridUI extends Component {
     // 坐标工具
     // ─────────────────────────────────────────────────────────────
 
-    /** 屏幕坐标命中检测，返回武器节点信息 */
+    /** 屏幕坐标命中检测 */
     private _hitTestWeapon(screenPos: Vec2): { node: Node; weapon: Weapon; row: number; col: number } | null {
+        if (!this.gridContainer) return null;
         const gm = GridManager.instance;
         if (!gm) return null;
 
-        for (let r = 0; r < gm.rows; r++) {
-            for (let c = 0; c < gm.cols; c++) {
-                const node = this._weaponNodes[r]?.[c];
-                if (!node) continue;
+        const containerWorldPos = new Vec3();
+        this.gridContainer.getWorldPosition(containerWorldPos);
 
-                const uit = node.getComponent(UITransform);
-                if (!uit) continue;
+        const step = this.cellSize + this.cellGap;
+        const totalW = 3 * step + this.cellSize;
+        const totalH = 3 * step + this.cellSize;
 
-                const worldPos = new Vec3();
-                node.getWorldPosition(worldPos);
+        // screenPos 相对于容器中心的偏移
+        const dx = screenPos.x - containerWorldPos.x;
+        const dy = screenPos.y - containerWorldPos.y;
 
-                const half = this.cellSize / 2;
-                if (
-                    screenPos.x >= worldPos.x - half &&
-                    screenPos.x <= worldPos.x + half &&
-                    screenPos.y >= worldPos.y - half &&
-                    screenPos.y <= worldPos.y + half
-                ) {
-                    const weapon = node.getComponent(Weapon);
-                    if (weapon) return { node, weapon, row: r, col: c };
-                }
-            }
-        }
-        return null;
+        // 换算成格子行列（0起）
+        const col = Math.floor((dx + totalW / 2) / step);
+        const row = Math.floor((-dy + totalH / 2) / step);
+
+        if (row < 0 || row >= 4 || col < 0 || col >= 4) return null;
+        if (!gm.isActive(row, col)) return null;
+
+        const node = this._weaponNodes[row]?.[col];
+        if (!node || !node.isValid) return null;
+
+        const weapon = node.getComponent(Weapon);
+        if (!weapon) return null;
+
+        return { node, weapon, row, col };
     }
 
     /** 屏幕坐标转格子坐标 */
@@ -360,20 +680,20 @@ export class GridUI extends Component {
         const gm = GridManager.instance;
         if (!gm || !this.gridContainer) return null;
 
-        const step = this.cellSize + this.cellGap;
-        const offsetX = -((gm.cols - 1) * step) / 2;
-        const offsetY = ((gm.rows - 1) * step) / 2;
-
         const containerWorldPos = new Vec3();
         this.gridContainer.getWorldPosition(containerWorldPos);
 
-        const localX = screenPos.x - containerWorldPos.x;
-        const localY = screenPos.y - containerWorldPos.y;
+        const step = this.cellSize + this.cellGap;
+        const totalW = 3 * step + this.cellSize;
+        const totalH = 3 * step + this.cellSize;
 
-        const col = Math.round((localX - offsetX) / step);
-        const row = Math.round((offsetY - localY) / step);
+        const dx = screenPos.x - containerWorldPos.x;
+        const dy = screenPos.y - containerWorldPos.y;
 
-        if (row >= 0 && row < gm.rows && col >= 0 && col < gm.cols) {
+        const col = Math.floor((dx + totalW / 2) / step);
+        const row = Math.floor((-dy + totalH / 2) / step);
+
+        if (row >= 0 && row < 4 && col >= 0 && col < 4 && gm.isActive(row, col)) {
             return { row, col };
         }
         return null;
@@ -381,22 +701,13 @@ export class GridUI extends Component {
 
     /** 获取格子的世界坐标 */
     private _getCellWorldPos(row: number, col: number): Vec3 {
-        const gm = GridManager.instance;
-        if (!gm || !this.gridContainer) return new Vec3();
-
-        const step = this.cellSize + this.cellGap;
-        const offsetX = -((gm.cols - 1) * step) / 2;
-        const offsetY = ((gm.rows - 1) * step) / 2;
-
-        const x = offsetX + col * step;
-        const y = offsetY - row * step;
-
+        if (!this.gridContainer) return new Vec3();
+        const local = this._getCellLocalPos(row, col);
         const containerWorldPos = new Vec3();
         this.gridContainer.getWorldPosition(containerWorldPos);
-
         return new Vec3(
-            containerWorldPos.x + x,
-            containerWorldPos.y + y,
+            containerWorldPos.x + local.x,
+            containerWorldPos.y + local.y,
             0
         );
     }
@@ -406,8 +717,8 @@ export class GridUI extends Component {
     // ─────────────────────────────────────────────────────────────
 
     // ─── 布局常量 ──────────────────────────────────────────────────
-    // 准备阶段：格子居中大格
-    private readonly PREP_POS   = new Vec3(-270, 0, 0);
+    // 准备阶段：gridContainer 本地坐标（相对于 Canvas 中心）
+    private readonly PREP_POS   = new Vec3(-350, 50, 0);
     private readonly PREP_SCALE = new Vec3(1, 1, 1);
     // 战斗阶段：武器变成底部一排小图标（不显示格子背景）
     private readonly BATTLE_Y     = -295;
@@ -424,42 +735,75 @@ export class GridUI extends Component {
         }
     }
 
-    /** 进入战斗：格子背景隐藏，武器缩成底部一排图标 */
+    /** 进入战斗：格子背景隐藏，武器缩成底部多排图标 */
     private _enterBattleLayout(): void {
+        this._inBattle = true;
         // 隐藏格子背景
         for (const row of this._cellNodes) {
             for (const cell of row) { if (cell) cell.active = false; }
         }
-        // 把所有武器节点排成一行
-        const weapons: Node[] = [];
-        for (const row of this._weaponNodes) {
-            for (const node of row) { if (node) weapons.push(node); }
+
+        // 收集所有主格武器节点
+        const weapons: { node: Node; config: WeaponConfig }[] = [];
+        for (let r = 0; r < 4; r++) {
+            for (let c = 0; c < 4; c++) {
+                const node = this._weaponNodes[r]?.[c];
+                if (!node) continue;
+                const weapon = node.getComponent(Weapon);
+                if (!weapon?.config) continue;
+                weapons.push({ node, config: weapon.config });
+            }
         }
-        const total = weapons.length;
-        const step  = this.BATTLE_ICON + this.BATTLE_GAP;
-        const startX = -(total - 1) * step / 2;
-        weapons.forEach((node, i) => {
+        if (weapons.length === 0) return;
+
+        const ICON_H  = 52;          // 图标高度（统一）
+        const GAP     = 8;           // 图标间隙
+        const SCALE   = ICON_H / this.cellSize;   // 缩放比例
+        const localCenterX = 80;     // 屏幕中心(640) - GridContainer世界x(560) = 80
+        const localBaseY   = -295;
+
+        // 先算每个武器的图标宽度（按 shape 等比缩放）
+        const iconWidths = weapons.map(({ config }) => {
+            const span = config.shape === '1x3' || config.shape === '3x1' ? 3
+                       : config.shape === '1x2' || config.shape === '2x1' ? 2 : 1;
+            // 原始宽度 = span * cellSize + (span-1) * cellGap，缩放后
+            const rawW = span * this.cellSize + (span - 1) * this.cellGap;
+            return rawW * SCALE;
+        });
+
+        // 计算一行总宽（所有武器宽+间隙），居中对齐
+        const totalW = iconWidths.reduce((s, w) => s + w, 0) + GAP * (weapons.length - 1);
+        let curX = localCenterX - totalW / 2;
+
+        weapons.forEach(({ node, config }, i) => {
             if (!this.gridContainer) return;
-            this.gridContainer.addChild(node); // 统一父节点
+            if (node.parent !== this.gridContainer) {
+                this.gridContainer.addChild(node);
+            }
+
+            // 保持 shape 比例的宽度，高度统一 ICON_H
+            const span = config.shape === '1x3' || config.shape === '3x1' ? 3
+                       : config.shape === '1x2' || config.shape === '2x1' ? 2 : 1;
+            const rawW = span * this.cellSize + (span - 1) * this.cellGap;
+            const iconW = rawW * SCALE;
+            const uit = node.getComponent(UITransform);
+            if (uit) uit.setContentSize(rawW, this.cellSize);  // 保持原尺寸，用 scale 缩
+
+            const targetX = curX + iconW / 2;   // 中心 = 起点 + 半宽
+            curX += iconW + GAP;
+
             tween(node)
                 .to(0.3, {
-                    worldPosition: new Vec3(
-                        640 + startX + i * step,   // 世界坐标 X，居中
-                        this.BATTLE_Y + 360,        // 世界坐标 Y（Canvas中心360）
-                        0
-                    ),
-                    scale: new Vec3(
-                        this.BATTLE_ICON / this.cellSize,
-                        this.BATTLE_ICON / this.cellSize,
-                        1
-                    )
-                }, { easing: 'cubicOut' })
+                    position: new Vec3(targetX, localBaseY, 0),
+                    scale: new Vec3(SCALE, SCALE, 1)
+                }, { easing: "cubicOut" })
                 .start();
         });
     }
 
     /** 退出战斗：清除 CD 阴影，武器回到格子，格子背景重显 */
     private _exitBattleLayout(): void {
+        this._inBattle = false;
         // 清除所有武器的 CD 遮罩
         for (const row of this._weaponNodes) {
             for (const node of row) {
@@ -468,26 +812,32 @@ export class GridUI extends Component {
                 if (cdNode) {
                     cdNode.getComponent(Graphics)?.clear();
                 }
-                // 归位（tween 回格子原始坐标和 scale）
+                // 归位（tween 回格子原始坐标和 scale，并恢复原始宽度）
                 const weapon = node.getComponent(Weapon);
                 if (!weapon) continue;
-                const cellWorldPos = this._getCellWorldPos(weapon.row, weapon.col);
+                const cellLocalPos = this._getCellLocalPos(weapon.row, weapon.col);
+                // 恢复多格武器的 contentSize
+                const shape = weapon.config?.shape ?? '1x1';
+                const origWidth = this._getShapePixelWidth(shape);
+                const uit = node.getComponent(UITransform);
+                if (uit) uit.setContentSize(origWidth, this.cellSize);
+                // 多格武器归位坐标需要加 offsetX（同 _spawnWeaponNode 的逻辑）
+                const step = this.cellSize + this.cellGap;
+                const span = shape === '1x3' || shape === '3x1' ? 3
+                           : shape === '1x2' || shape === '2x1' ? 2 : 1;
+                const offsetX = (span - 1) * step / 2;
+                const targetPos = new Vec3(cellLocalPos.x + offsetX, cellLocalPos.y, 0);
+                const capturedWeapon = weapon;
                 tween(node)
                     .to(0.3, {
-                        worldPosition: cellWorldPos,
+                        position: targetPos,
                         scale: new Vec3(1, 1, 1)
                     }, { easing: 'cubicOut' })
+                    .call(() => capturedWeapon.refreshGridWorldPos())
                     .start();
             }
         }
-        // 恢复格子背景（延迟等动画结束）
-        this.scheduleOnce(() => {
-            for (const row of this._cellNodes) {
-                for (const cell of row) { if (cell) cell.active = true; }
-            }
-        }, 0.35);
-
-        // 每两波后格子可能扩了，重建格子背景
+        // 每两波后格子可能扩了，重建格子背景（同时恢复背景可见性）
         this.scheduleOnce(() => this._rebuildCells(), 0.4);
     }
 
@@ -495,48 +845,36 @@ export class GridUI extends Component {
     private _rebuildCells(): void {
         const gm = GridManager.instance;
         if (!gm || !this.gridContainer) return;
-        const newRows = gm.rows;
-        const newCols = gm.cols;
-        if (newRows === this._cellNodes.length && newCols === (this._cellNodes[0]?.length ?? 0)) return;
+        this._lastActiveCount = gm.activeCount;
 
-        // 移除旧格子背景
+        // 确保容器在正确位置（不移动，由scene决定）
+        // this.gridContainer.setPosition(this.PREP_POS);
+
+        // 确保 4×4 数组完整初始化
+        for (let r = 0; r < 4; r++) {
+            if (!this._cellNodes[r]) this._cellNodes[r] = new Array(4).fill(null);
+            if (!this._weaponNodes[r]) this._weaponNodes[r] = new Array(4).fill(null);
+        }
+
+        // 新建刚解锁的格子节点
+        for (let r = 0; r < 4; r++) {
+            for (let c = 0; c < 4; c++) {
+                if (gm.isActive(r, c) && !this._cellNodes[r][c]) {
+                    const cell = this._buildCell(r, c, true);
+                    this._cellNodes[r][c] = cell;
+                    // 战斗中新解锁的格子背景也要保持隐藏
+                    if (cell && this._inBattle) cell.active = false;
+                }
+            }
+        }
+        console.log(`[GridUI] _rebuildCells 完成，激活 ${gm.activeCount} 格`);
+        // 先把所有已有背景格恢复显示（退出战斗后需要重显），再同步副格可见性
         for (const row of this._cellNodes) {
-            for (const cell of row) { cell?.destroy(); }
+            for (const cell of row) { if (cell) cell.active = true; }
         }
-        // 格子变多时缩小 cellSize（最小80）
-        const maxCols = Math.max(newRows, newCols);
-        this.cellSize = Math.max(80, Math.floor(460 / maxCols));
-
-        // 重新初始化格子背景数组
-        this._cellNodes = [];
-        for (let r = 0; r < newRows; r++) {
-            this._cellNodes[r] = [];
-            for (let c = 0; c < newCols; c++) {
-                this._cellNodes[r][c] = this._buildCell(r, c);
-            }
-        }
-
-        // 武器节点数组扩容
-        while (this._weaponNodes.length < newRows) {
-            this._weaponNodes.push(new Array(newCols).fill(null));
-        }
-        for (const row of this._weaponNodes) {
-            while (row.length < newCols) row.push(null);
-        }
-
-        // ★ 重新定位所有已有武器节点到新格子坐标
-        for (let r = 0; r < this._weaponNodes.length; r++) {
-            for (let c = 0; c < (this._weaponNodes[r]?.length ?? 0); c++) {
-                const node = this._weaponNodes[r][c];
-                if (!node) continue;
-                const newPos = this._getCellWorldPos(r, c);
-                tween(node)
-                    .to(0.3, { worldPosition: newPos }, { easing: 'cubicOut' })
-                    .start();
-                // UITransform 尺寸也同步缩放
-                node.getComponent(UITransform)?.setContentSize(this.cellSize, this.cellSize);
-            }
-        }
+        // 同步副格背景可见性（_inBattle 时此函数直接 return，不影响战斗中）
+        const grid = gm.getGrid();
+        if (grid) this._syncSubCellVisibility(grid);
     }
 
     private _setAllWeaponsAttack(enabled: boolean): void {
@@ -547,5 +885,12 @@ export class GridUI extends Component {
                 }
             }
         }
+    }
+
+    /** 根据 shape 返回像素宽度（含 gap） */
+    private _getShapePixelWidth(shape: string): number {
+        if (shape === '1x2' || shape === '2x1') return this.cellSize * 2 + this.cellGap;
+        if (shape === '1x3' || shape === '3x1') return this.cellSize * 3 + this.cellGap * 2;
+        return this.cellSize; // 1x1
     }
 }

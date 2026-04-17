@@ -1,7 +1,61 @@
 [
-  { "level": 1, "name": "木弓",    "damage": 10,  "attackSpeed": 1.5, "range": 400, "cost": 50, "mergeTo": 2 },
-  { "level": 2, "name": "铁弩",    "damage": 25,  "attackSpeed": 1.3, "range": 450, "cost": 0,  "mergeTo": 3 },
-  { "level": 3, "name": "魔法炮",  "damage": 60,  "attackSpeed": 1.0, "range": 500, "cost": 0,  "mergeTo": 4 },
-  { "level": 4, "name": "雷霆炮台","damage": 140, "attackSpeed": 0.9, "range": 550, "cost": 0,  "mergeTo": 5 },
-  { "level": 5, "name": "神圣炮台","damage": 320, "attackSpeed": 0.7, "range": 600, "cost": 0,  "mergeTo": null }
+  // ───── 物理 1x1 ─────
+  { "id": "phy_1x1_1", "element": "physical", "shape": "1x1", "level": 1, "name": "木弓",     "damage": 20,  "attackSpeed": 1.0, "range": 420, "cost": 50, "mergeToId": "phy_1x1_2" },
+  { "id": "phy_1x1_2", "element": "physical", "shape": "1x1", "level": 2, "name": "铁弩",     "damage": 55,  "attackSpeed": 0.8, "range": 460, "cost": 0,  "mergeToId": "phy_1x1_3" },
+  { "id": "phy_1x1_3", "element": "physical", "shape": "1x1", "level": 3, "name": "连弩炮",   "damage": 130, "attackSpeed": 0.5, "range": 500, "cost": 0,  "mergeToId": null },
+
+  // ───── 物理 1x2 ─────
+  { "id": "phy_1x2_1", "element": "physical", "shape": "1x2", "level": 1, "name": "长枪",     "damage": 50,  "attackSpeed": 1.2, "range": 480, "cost": 100,"mergeToId": "phy_1x2_2" },
+  { "id": "phy_1x2_2", "element": "physical", "shape": "1x2", "level": 2, "name": "重斧",     "damage": 130, "attackSpeed": 1.0, "range": 520, "cost": 0,  "mergeToId": "phy_1x2_3" },
+  { "id": "phy_1x2_3", "element": "physical", "shape": "1x2", "level": 3, "name": "巨剑炮台", "damage": 300, "attackSpeed": 0.7, "range": 560, "cost": 0,  "mergeToId": null },
+
+  // ───── 物理 1x3 ─────
+  { "id": "phy_1x3_1", "element": "physical", "shape": "1x3", "level": 1, "name": "三叉戟",   "damage": 100, "attackSpeed": 1.5, "range": 500, "cost": 180,"mergeToId": "phy_1x3_2" },
+  { "id": "phy_1x3_2", "element": "physical", "shape": "1x3", "level": 2, "name": "战车炮",   "damage": 260, "attackSpeed": 1.2, "range": 550, "cost": 0,  "mergeToId": "phy_1x3_3" },
+  { "id": "phy_1x3_3", "element": "physical", "shape": "1x3", "level": 3, "name": "神圣巨炮", "damage": 600, "attackSpeed": 0.8, "range": 600, "cost": 0,  "mergeToId": null },
+
+  // ───── 火 1x1 ─────
+  { "id": "fire_1x1_1", "element": "fire", "shape": "1x1", "level": 1, "name": "火把",       "damage": 15,  "attackSpeed": 0.9, "range": 400, "cost": 50, "mergeToId": "fire_1x1_2" },
+  { "id": "fire_1x1_2", "element": "fire", "shape": "1x1", "level": 2, "name": "火球炮",     "damage": 40,  "attackSpeed": 0.7, "range": 440, "cost": 0,  "mergeToId": "fire_1x1_3" },
+  { "id": "fire_1x1_3", "element": "fire", "shape": "1x1", "level": 3, "name": "熔岩炮",     "damage": 100, "attackSpeed": 0.5, "range": 480, "cost": 0,  "mergeToId": null },
+
+  // ───── 火 1x2 ─────
+  { "id": "fire_1x2_1", "element": "fire", "shape": "1x2", "level": 1, "name": "焰刃",       "damage": 40,  "attackSpeed": 1.0, "range": 460, "cost": 100,"mergeToId": "fire_1x2_2" },
+  { "id": "fire_1x2_2", "element": "fire", "shape": "1x2", "level": 2, "name": "火龙炮",     "damage": 100, "attackSpeed": 0.8, "range": 500, "cost": 0,  "mergeToId": "fire_1x2_3" },
+  { "id": "fire_1x2_3", "element": "fire", "shape": "1x2", "level": 3, "name": "地狱火炮",   "damage": 240, "attackSpeed": 0.6, "range": 540, "cost": 0,  "mergeToId": null },
+
+  // ───── 火 1x3 ─────
+  { "id": "fire_1x3_1", "element": "fire", "shape": "1x3", "level": 1, "name": "火焰喷射器", "damage": 80,  "attackSpeed": 1.2, "range": 480, "cost": 180,"mergeToId": "fire_1x3_2" },
+  { "id": "fire_1x3_2", "element": "fire", "shape": "1x3", "level": 2, "name": "熔岩巨炮",   "damage": 200, "attackSpeed": 1.0, "range": 530, "cost": 0,  "mergeToId": "fire_1x3_3" },
+  { "id": "fire_1x3_3", "element": "fire", "shape": "1x3", "level": 3, "name": "太阳炮台",   "damage": 480, "attackSpeed": 0.7, "range": 580, "cost": 0,  "mergeToId": null },
+
+  // ───── 雷 1x1 ─────
+  { "id": "ltng_1x1_1", "element": "lightning", "shape": "1x1", "level": 1, "name": "电棒",   "damage": 18,  "attackSpeed": 0.8, "range": 420, "cost": 50, "mergeToId": "ltng_1x1_2" },
+  { "id": "ltng_1x1_2", "element": "lightning", "shape": "1x1", "level": 2, "name": "雷电球", "damage": 50,  "attackSpeed": 0.6, "range": 460, "cost": 0,  "mergeToId": "ltng_1x1_3" },
+  { "id": "ltng_1x1_3", "element": "lightning", "shape": "1x1", "level": 3, "name": "雷神锤", "damage": 120, "attackSpeed": 0.4, "range": 500, "cost": 0,  "mergeToId": null },
+
+  // ───── 雷 1x2 ─────
+  { "id": "ltng_1x2_1", "element": "lightning", "shape": "1x2", "level": 1, "name": "闪电枪", "damage": 45,  "attackSpeed": 0.9, "range": 480, "cost": 100,"mergeToId": "ltng_1x2_2" },
+  { "id": "ltng_1x2_2", "element": "lightning", "shape": "1x2", "level": 2, "name": "雷霆炮", "damage": 115, "attackSpeed": 0.7, "range": 520, "cost": 0,  "mergeToId": "ltng_1x2_3" },
+  { "id": "ltng_1x2_3", "element": "lightning", "shape": "1x2", "level": 3, "name": "雷暴炮台","damage": 270, "attackSpeed": 0.5, "range": 560, "cost": 0,  "mergeToId": null },
+
+  // ───── 雷 1x3 ─────
+  { "id": "ltng_1x3_1", "element": "lightning", "shape": "1x3", "level": 1, "name": "连锁闪电","damage": 90,  "attackSpeed": 1.1, "range": 500, "cost": 180,"mergeToId": "ltng_1x3_2" },
+  { "id": "ltng_1x3_2", "element": "lightning", "shape": "1x3", "level": 2, "name": "风暴发生器","damage": 230,"attackSpeed": 0.9, "range": 550, "cost": 0,  "mergeToId": "ltng_1x3_3" },
+  { "id": "ltng_1x3_3", "element": "lightning", "shape": "1x3", "level": 3, "name": "雷帝炮台","damage": 550, "attackSpeed": 0.6, "range": 600, "cost": 0,  "mergeToId": null },
+
+  // ───── 冰 1x1 ─────
+  { "id": "ice_1x1_1", "element": "ice", "shape": "1x1", "level": 1, "name": "冰锥",         "damage": 12,  "attackSpeed": 1.0, "range": 420, "cost": 50, "mergeToId": "ice_1x1_2" },
+  { "id": "ice_1x1_2", "element": "ice", "shape": "1x1", "level": 2, "name": "冰晶炮",       "damage": 35,  "attackSpeed": 0.8, "range": 460, "cost": 0,  "mergeToId": "ice_1x1_3" },
+  { "id": "ice_1x1_3", "element": "ice", "shape": "1x1", "level": 3, "name": "极寒炮",       "damage": 85,  "attackSpeed": 0.6, "range": 500, "cost": 0,  "mergeToId": null },
+
+  // ───── 冰 1x2 ─────
+  { "id": "ice_1x2_1", "element": "ice", "shape": "1x2", "level": 1, "name": "霜刃",         "damage": 35,  "attackSpeed": 1.1, "range": 460, "cost": 100,"mergeToId": "ice_1x2_2" },
+  { "id": "ice_1x2_2", "element": "ice", "shape": "1x2", "level": 2, "name": "冰暴炮",       "damage": 90,  "attackSpeed": 0.9, "range": 500, "cost": 0,  "mergeToId": "ice_1x2_3" },
+  { "id": "ice_1x2_3", "element": "ice", "shape": "1x2", "level": 3, "name": "冰川炮台",     "damage": 210, "attackSpeed": 0.7, "range": 540, "cost": 0,  "mergeToId": null },
+
+  // ───── 冰 1x3 ─────
+  { "id": "ice_1x3_1", "element": "ice", "shape": "1x3", "level": 1, "name": "冰龙吐息",     "damage": 70,  "attackSpeed": 1.3, "range": 480, "cost": 180,"mergeToId": "ice_1x3_2" },
+  { "id": "ice_1x3_2", "element": "ice", "shape": "1x3", "level": 2, "name": "极地风暴",     "damage": 180, "attackSpeed": 1.1, "range": 530, "cost": 0,  "mergeToId": "ice_1x3_3" },
+  { "id": "ice_1x3_3", "element": "ice", "shape": "1x3", "level": 3, "name": "永冻炮台",     "damage": 430, "attackSpeed": 0.8, "range": 580, "cost": 0,  "mergeToId": null }
 ]

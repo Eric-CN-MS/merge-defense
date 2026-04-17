@@ -14,9 +14,17 @@ export class Projectile extends Component {
     // ─── 运行时数据 ───────────────────────────────────────────────
     private _target: Enemy | null = null;
     private _damage: number = 0;
-    private _speed: number = 800;        // 子弹速度（像素/秒）
+    private _speed: number = 800;
     private _active: boolean = false;
-    private _color: Color = new Color(255, 220, 50, 255); // 默认黄色
+
+    // 元素颜色配置（outer glow / mid / core）
+    private static readonly ELEMENT_COLORS: Record<string, [Color, Color, Color]> = {
+        physical:  [new Color( 80, 130, 220,  60), new Color(100, 160, 240, 180), new Color(150, 200, 255, 255)],
+        fire:      [new Color(255,  80,  20,  60), new Color(255, 130,  50, 180), new Color(255, 200, 100, 255)],
+        lightning: [new Color(220, 200,  30,  60), new Color(240, 230,  60, 180), new Color(255, 255, 120, 255)],
+        ice:       [new Color( 60, 180, 240,  60), new Color(100, 210, 255, 180), new Color(200, 240, 255, 255)],
+    };
+    private _element: string = 'physical';
 
     // 回收回调（对象池用）
     private _onRecycle: ((p: Projectile) => void) | null = null;
@@ -33,15 +41,16 @@ export class Projectile extends Component {
         target: Enemy,
         damage: number,
         onRecycle: (p: Projectile) => void,
-        speed: number = 800
+        speed: number = 800,
+        element: string = 'physical'
     ): void {
         this._target = target;
         this._damage = damage;
         this._onRecycle = onRecycle;
         this._speed = speed;
         this._active = true;
+        this._element = element;
         this.node.active = true;
-        // 确保 layer = UI_2D，否则 Camera 看不到
         this.node.layer = Layers.Enum.UI_2D;
         this._drawBullet();
     }
@@ -60,19 +69,23 @@ export class Projectile extends Component {
         let g = this.node.getComponent(Graphics);
         if (!g) g = this.node.addComponent(Graphics);
         g.clear();
-        // 大光晕
-        g.fillColor = new Color(255, 200, 50, 60);
+
+        const colors = Projectile.ELEMENT_COLORS[this._element] ?? Projectile.ELEMENT_COLORS['physical'];
+        const [glow, mid, core] = colors;
+
+        // 外光晕
+        g.fillColor = glow;
         g.circle(0, 0, 12);
         g.fill();
         // 中圈
-        g.fillColor = new Color(255, 230, 80, 180);
+        g.fillColor = mid;
         g.circle(0, 0, 8);
         g.fill();
         // 实心内核
-        g.fillColor = new Color(255, 255, 120, 255);
+        g.fillColor = core;
         g.circle(0, 0, 5);
         g.fill();
-        // 描边
+        // 描边（白色高亮）
         g.strokeColor = new Color(255, 255, 255, 200);
         g.lineWidth = 1.5;
         g.circle(0, 0, 5);
@@ -85,7 +98,6 @@ export class Projectile extends Component {
 
     update(dt: number) {
         if (!this._active || !this._target) {
-            // 目标消失（已死）直接回收
             this._recycle();
             return;
         }
@@ -102,20 +114,16 @@ export class Projectile extends Component {
         const dy = targetPos.y - myPos.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
-        // 命中判定
         if (dist < 20) {
             this._target.takeDamage(this._damage);
             this._recycle();
             return;
         }
 
-        // 朝目标飞行
         const moveX = (dx / dist) * this._speed * dt;
         const moveY = (dy / dist) * this._speed * dt;
         this.node.setWorldPosition(myPos.x + moveX, myPos.y + moveY, 0);
     }
-
-    // ─────────────────────────────────────────────────────────────
 
     private _recycle(): void {
         this._active = false;

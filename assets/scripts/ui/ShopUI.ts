@@ -52,6 +52,9 @@ export class ShopUI extends Component {
         // 监听金币变化，更新按钮状态
         EconomyManager.instance?.onGoldChange(this._onGoldChange.bind(this));
 
+        // 监听格子变化（合并后腾出空格时刷新按钮）
+        GridManager.instance?.onChange(() => this._refreshBuyButton());
+
         // 监听游戏状态
         GameManager.instance?.onStateChange(this._onStateChange.bind(this));
 
@@ -109,12 +112,13 @@ export class ShopUI extends Component {
             return;
         }
 
-        // 获取1级武器配置
-        const weaponConfig = gm.getWeaponConfig(1);
-        if (!weaponConfig) {
-            console.error('[ShopUI] 找不到1级武器配置');
+        // 随机选一个 1x1 的 1级武器（4种元素随机）
+        const lv1Weapons = gm.getLv1WeaponConfigs().filter(w => w.shape === '1x1');
+        if (!lv1Weapons.length) {
+            console.error('[ShopUI] 找不到可购买武器');
             return;
         }
+        const weaponConfig = lv1Weapons[Math.floor(Math.random() * lv1Weapons.length)];
 
         // 扣金币
         const success = economy.spend(GAME_CONFIG.WEAPON_COST);
@@ -125,7 +129,7 @@ export class ShopUI extends Component {
 
         // 按钮点击反馈动画
         this._playBuyFeedback();
-        console.log('[ShopUI] 购买成功：1级武器');
+        console.log(`[ShopUI] 购买成功：${weaponConfig.name}`);
     }
 
     private _onStartWaveClick(): void {
@@ -150,9 +154,9 @@ export class ShopUI extends Component {
 
         const canBuy = economy?.canAfford(GAME_CONFIG.WEAPON_COST) ?? false;
         const hasSpace = grid?.hasEmptyCell() ?? true;
-        const inPrep = gm?.state === GameState.WAVE_PREP;
+        const notGameOver = gm?.state !== GameState.GAME_OVER;
 
-        const enabled = canBuy && hasSpace && inPrep;
+        const enabled = canBuy && hasSpace && notGameOver;
         this.buyButton.interactable = enabled;
 
         // 按钮文字颜色
